@@ -11,6 +11,7 @@ Verion 1.4
         - Registered VEH catches exception
         - VEH sets hardware breakpoints on legitimate syscall instruction within ntdll
         - Allows us to borrow legitimate instructions and avoids raw syscalls
+    - Added memory cleanup (arg: /c)
 
 Version 1.3
 *New Features

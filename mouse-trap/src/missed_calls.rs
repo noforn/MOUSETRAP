@@ -174,6 +174,27 @@ pub unsafe fn nt_open_thread(
     )
 }
 
+pub unsafe fn nt_free_virtual_memory(
+    process_handle: HANDLE,
+    base_address: *mut *mut c_void,
+    region_size: *mut SIZE_T,
+    free_type: u32,
+) -> i32 {
+    syscall!(
+        "NtFreeVirtualMemory",
+        unsafe extern "system" fn(
+            HANDLE,
+            *mut *mut c_void,
+            *mut SIZE_T,
+            u32
+        ) -> i32,
+        process_handle,
+        base_address,
+        region_size,
+        free_type
+    )
+}
+
 /*********************************************************************************
                             --- SECRET//NOFORN ---
 **********************************************************************************/
