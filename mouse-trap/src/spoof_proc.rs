@@ -86,7 +86,7 @@ pub unsafe fn spawn_spoofed_process(parent_pid: u32, child_cmd: &str) -> Result<
 
     match result {
         Ok(_) => {
-            println!("[+] Spoofed PPID successfully! Child PID: {} (Parent PID: {})", pi.dwProcessId, parent_pid);
+            //println!("[+] Spoofed! Child: {} (Parent: {})", pi.dwProcessId, parent_pid);
             Ok(pi)
         }
         Err(e) => Err(e)
