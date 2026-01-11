@@ -28,8 +28,6 @@ use std::{
 use crate::hooks::{initialize_hooks, destroy_hooks};
 pub use indirect_lib::{get_ssn_by_name, set_hw_bp};
 
-
-
 use windows::{
     core::{s, Error, PCSTR, PSTR, Result},
     Win32::System::{
@@ -72,8 +70,6 @@ fn main() -> Result<()> {
         } else {
             println!("Failed: 211");
         }
-
-
 
         // patch AMSI
         let patch_opcode = 0x75u8;
