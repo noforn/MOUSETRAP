@@ -13,7 +13,7 @@ use core::ptr::null_mut;
 #[cfg(feature = "debug")]
 use libc_print::libc_println;
 
-use crate::debug_println;
+
 use crate::def::{
     DllInfo, CALL_FIRST, EIGHTH_ARGUMENT, ELEVENTH_ARGUMENT, EXCEPTION_ACCESS_VIOLATION,
     EXCEPTION_CONTINUE_EXECUTION, EXCEPTION_CONTINUE_SEARCH, EXCEPTION_SINGLE_STEP, FIFTH_ARGUMENT,

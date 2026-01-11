@@ -8,13 +8,8 @@ use windows::{
     Win32::{
         Foundation::{CloseHandle, HANDLE},
         System::{
-            Diagnostics::Debug::{WriteProcessMemory, CONTEXT, GetThreadContext, SetThreadContext, CONTEXT_FLAGS, FlushInstructionCache},
+            Diagnostics::Debug::{CONTEXT, CONTEXT_FLAGS, FlushInstructionCache},
             LibraryLoader::{GetModuleHandleA, GetProcAddress},
-            Memory::{VirtualAllocEx, MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE},
-            Threading::{
-                OpenProcess, OpenThread, ResumeThread, SuspendThread,
-                PROCESS_ALL_ACCESS, THREAD_ALL_ACCESS
-            },
         },
         UI::WindowsAndMessaging::{PostThreadMessageA, WM_NULL},
     },

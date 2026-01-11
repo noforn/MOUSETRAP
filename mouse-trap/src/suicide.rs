@@ -9,7 +9,7 @@ use windows::{
         Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE},
         Storage::FileSystem::{
             CreateFileW, SetFileInformationByHandle, 
-            FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_SHARE_DELETE, OPEN_EXISTING, 
+            FILE_SHARE_READ, OPEN_EXISTING, 
             DELETE, SYNCHRONIZE, FileRenameInfo, FILE_FLAGS_AND_ATTRIBUTES,
         },
         System::{
