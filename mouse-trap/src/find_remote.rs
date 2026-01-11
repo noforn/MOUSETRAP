@@ -69,6 +69,7 @@ pub unsafe fn find_target_pid(process_name: &str) -> Option<u32> {
 
 // find a thread ID in the specified remote process
 // returns first available thread ID, or None if none found
+#[allow(dead_code)]
 pub unsafe fn find_remote_thread_id(target_pid: u32) -> Option<u32> {
     // snapshot all threads
     let h_snapshot = match CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) {
@@ -137,6 +138,7 @@ pub unsafe fn find_all_remote_thread_ids(target_pid: u32) -> Vec<u32> {
 
 // enumerate all PIDs matching a process name
 // returns vector of all matching PIDs
+#[allow(dead_code)]
 pub unsafe fn find_all_pids(process_name: &str) -> Vec<u32> {
     let mut pids = [0u32; 1024];
     let mut bytes_returned = 0u32;

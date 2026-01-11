@@ -4,6 +4,14 @@
 
                             *****RELEASE NOTES*****
 
+Version 1.3
+*New Features
+    - Now supports PPID spoofing! (arg: /s)
+    - If admin, will attempt spoolsv spoof to spawn
+        svchost.exe as SYSTEM!
+    - svchost.exe appears with correct lineage
+    - Refined suicide logic (arg: /d)
+
 Version 1.2
 *New Features
     - Now supports remote fibers! (arg: /r)

