@@ -242,7 +242,7 @@ pub unsafe fn hijack_thread_with_fiber(
     let verify_ctx = get_remote_thread_context(h_thread)?;
 
     if verify_ctx.0.Rip != stub_addr as u64 {
-        println!("[-] Did not update.");
+        // println!("[-] Did not update.");
     }
 
     // resume thread - check suspension count

