@@ -15,9 +15,7 @@ use crate::{
 };
 use core::ffi::c_ulong;
 
-/// syscall! macro is designed to resolve and invoke system calls
-/// simplifies finding syscall address and service number, setting up
-/// hardware bp, and invoking syscall with the specified params
+/// hardware bp, invoking syscall w/ specified params
 #[macro_export]
 macro_rules! syscall {
     ($syscall_name:expr, $fn_sig:ty, $($param:expr),*) => {
@@ -27,12 +25,12 @@ macro_rules! syscall {
             // resolve syscall address and SSN
             let ssn = unsafe { crate::get_ssn_by_name($syscall_name, None, &mut syscall_addr) };
 
-            // exit if the SSN is invalid or address is null
+            // exit if SSN invalid or address null
             if ssn < 0 || syscall_addr.is_null() {
                 return -1;
             }
 
-            // convert resolved address to function pointer of specified type ($fn_sig)
+            // convert address to function pointer of specified type ($fn_sig)
             let pt_syscall: $fn_sig = unsafe { core::mem::transmute(syscall_addr) };
 
             // set hardware bp on syscall
@@ -45,21 +43,6 @@ macro_rules! syscall {
 }
 
 /// retrieves SSN and address for a specified syscall
-///
-/// scans the loaded modules in memory to locate ntdll.dll, then utilizes Exception Directory and
-/// Export Address Table to identify the specified syscall
-
-/// matches the syscall either by name or an optional hash
-/// and returns SSN if match found, along with setting func address (addr param)
-///
-/// # args
-/// * syscall - name of the syscall to locate.
-/// * hash - optional hash of the syscall name. if provided, uses hash for matching
-/// * addr - mutable pointer that will be set to address of resolved syscall if match
-///
-/// # returns
-/// SSN of matched syscall or -1 if no match is found 
-/// if match is found, addr will contain func address in ntdll.dll
 
 pub unsafe fn get_ssn_by_name(syscall: &str, hash: Option<usize>, addr: &mut *mut u8) -> i32 {
     let peb = find_peb(); // get PEB
@@ -160,9 +143,15 @@ pub unsafe fn get_ssn_by_name(syscall: &str, hash: Option<usize>, addr: &mut *mu
                         }
                     }
 
-                    // increment SSN if func starts with "Zw" (syscall)
-                    if api_name_str.starts_with("Zw") {
-                        ssn += 1;
+                    // increment SSN if func starts with encrypted prefix
+                    let zw_vec = crate::crypto_utils::xor_decrypt(
+                        crate::crypto_constants::constants::ZW_PREFIX_ENC,
+                        crate::crypto_constants::constants::XOR_KEY
+                    );
+                    if let Ok(zw_prefix) = core::str::from_utf8(&zw_vec) {
+                        if api_name_str.starts_with(zw_prefix) {
+                            ssn += 1;
+                        }
                     }
                 }
             }

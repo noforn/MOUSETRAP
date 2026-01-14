@@ -10,12 +10,12 @@ use crate::def::{
     IMAGE_NT_SIGNATURE, PEB,
 };
 
-/// retrieves NT headers from base address of a module
+/// retrieves NT headers from base address of module
 #[cfg(target_arch = "x86_64")]
 pub unsafe fn get_nt_headers(base_addr: *mut u8) -> *mut ImageNtHeaders {
     let dos_header = base_addr as *mut ImageDosHeader;
 
-    // check if the DOS signature is valid (MZ)
+    // check if DOS signature valid (MZ)
     if (*dos_header).e_magic != IMAGE_DOS_SIGNATURE {
         return null_mut();
     }
@@ -31,7 +31,7 @@ pub unsafe fn get_nt_headers(base_addr: *mut u8) -> *mut ImageNtHeaders {
     nt_headers
 }
 
-/// finds and returns the base address and size of a module by its hash
+/// finds and returns the base address and size of module by hash
 pub unsafe fn ldr_module_info(module_hash: u32) -> (*mut u8, usize) {
     let peb = find_peb(); // get PEB
 
@@ -48,12 +48,10 @@ pub unsafe fn ldr_module_info(module_hash: u32) -> (*mut u8, usize) {
     let mut module_list =
         (*peb_ldr_data_ptr).in_load_order_module_list.flink as *mut LoaderDataTableEntry;
 
-    // iterate through the list
+    // iterate list
     while !(*module_list).dll_base.is_null() {
         let dll_buffer_ptr = (*module_list).base_dll_name.buffer;
         let dll_length = (*module_list).base_dll_name.length as usize;
-
-        // create slice from DLL name
         let dll_name_slice = core::slice::from_raw_parts(dll_buffer_ptr as *const u8, dll_length);
 
         // compare hashes
@@ -61,11 +59,9 @@ pub unsafe fn ldr_module_info(module_hash: u32) -> (*mut u8, usize) {
             let dll_base = (*module_list).dll_base as *const ImageDosHeader;
             let nt_headers = (dll_base as *const u8).offset((*dll_base).e_lfanew as isize)
                 as *const ImageNtHeaders;
-
-            // obtain size of module from OptionalHeader's SizeOfImage
             let size_of_image = (*nt_headers).optional_header.size_of_image as usize;
 
-            return ((*module_list).dll_base as _, size_of_image); // return
+            return ((*module_list).dll_base as _, size_of_image);
         }
 
         // move to next module

