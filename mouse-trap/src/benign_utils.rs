@@ -43,6 +43,7 @@ pub mod poly_gen {
 }
 
 pub struct Logger {
+    #[allow(dead_code)]
     pub level: u32,
     pub enabled: bool,
 }

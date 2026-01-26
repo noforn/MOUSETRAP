@@ -4,7 +4,12 @@
 
                             *****RELEASE NOTES*****
 
-Verion 1.4
+Version 1.5
+*New Features
+    - Added sandbox and debugger detection
+    - Added benign execution logic
+
+Version 1.4
 *New Features
     - Replaced basic unhooking with Indirect Syscalls via VEH and Hardware Breakpoints (Dr0/Dr1)!
         - Manually trigger EXCEPTION_ACCESS_VIOLATION

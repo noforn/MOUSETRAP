@@ -25,6 +25,7 @@ use windows::{
 
 // define NtSetInformationFile signature from ntdll
 #[repr(C)]
+#[allow(non_snake_case)]
 struct IO_STATUS_BLOCK {
     Status: i32,
     Information: usize,
@@ -41,9 +42,11 @@ extern "system" {
     ) -> i32;
 }
 
+#[allow(non_upper_case_globals)]
 const FileDispositionInformationEx: u32 = 64; 
 
 #[repr(C)]
+#[allow(non_snake_case)]
 struct FILE_DISPOSITION_INFORMATION_EX {
     Flags: u32,
 }

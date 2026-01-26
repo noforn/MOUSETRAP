@@ -1,0 +1,40 @@
+[package]
+name = "MOUSETRAP"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ntapi = "0.4"
+winapi = { version = "0.3", features = ["winnt", "errhandlingapi", "heapapi", "winuser", "ntdef", "handleapi", "memoryapi", "basetsd"] }
+windows = { version = "0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_SystemServices",
+    "Win32_System_SystemInformation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Kernel",
+    "Win32_System_Kernel",
+    "Win32_UI_WindowsAndMessaging",
+] }
+is-admin = "0.1.4"
+libc-print = "0.1.20"
+winres = "0.1.12"
+flate2 = "1.1.8"
+antilysis = "0.2.2"
+sysinfo = "0.38.0"
+
+[features]
+debug = []
+
+[profile.release]
+opt-level = "z"
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"

