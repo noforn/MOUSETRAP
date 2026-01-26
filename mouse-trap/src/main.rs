@@ -93,12 +93,8 @@ fn main() -> Result<()> {
                 Ok(_) => {},
                 Err(_) => {
                     // println!("Failed: 210");
-                    return Ok(());
                 },
             }
-        } else {
-            // println!("Failed: 211");
-            return Ok(());
         }
 
         // patch AMSI
