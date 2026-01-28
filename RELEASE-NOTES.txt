@@ -4,6 +4,11 @@
 
                             *****RELEASE NOTES*****
 
+Version 1.6
+*New Features
+    - Added additional target process support
+    - Improved fallback logic
+
 Version 1.5
 *New Features
     - Added sandbox and debugger detection

