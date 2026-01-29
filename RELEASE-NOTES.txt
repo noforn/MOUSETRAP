@@ -8,6 +8,7 @@ Version 1.6
 *New Features
     - Added additional target process support
     - Improved fallback logic
+    - Replaced XOR with hybrid RSA-AES
 
 Version 1.5
 *New Features
