@@ -9,6 +9,7 @@ Version 1.6
     - Added additional target process support
     - Improved fallback logic
     - Replaced XOR with hybrid RSA-AES
+        - SWISS and FETA are depricated
 
 Version 1.5
 *New Features
