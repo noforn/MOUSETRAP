@@ -11,7 +11,7 @@ def read_assembly_from_file(filename):
     with open(filename, 'r') as f:
         return f.read()
 
-CODE = read_assembly_from_file('asm-swiss.asm')
+CODE = read_assembly_from_file('asm-https.asm')
 
 def generate_keys():
     print("[*] Generating keys...")
