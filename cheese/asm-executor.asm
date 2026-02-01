@@ -256,11 +256,7 @@ read_command:
 
 execute_command:
     lea rdi, [rbp - 5120]
-    mov rax, 0x0020632f20646d63
-    mov [rdi], rax
-
     lea rsi, [rbp - 2048]
-    lea rdi, [rbp - 5120 + 7]
 copy_cmd:
     lodsb
     stosb

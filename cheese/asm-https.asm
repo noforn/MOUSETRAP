@@ -109,7 +109,7 @@ internet_open:
     mov r14, rax
 
 c2_loop:
-    mov rcx, 5000
+    mov rcx, 10000
     sub rsp, 32
     call [rbp - 24]
     add rsp, 32
