@@ -1,7 +1,7 @@
 start:
     cld
     mov rbp, rsp
-    sub rsp, 4096
+    sub rsp, 8192
     and rsp, 0xFFFFFFFFFFFFFFF0
 
 resolve_kernel32:
@@ -186,7 +186,7 @@ send_request:
     jz close_request
 
 read_file:
-    lea rdx, [rbp - 2048]
+    lea rdx, [rbp - 6144]
     mov rcx, rbx
     mov r8, 4096
     lea r9, [rbp - 200]
@@ -214,7 +214,7 @@ read_file:
     jz free_buffer
     
     mov rdi, rax
-    lea rsi, [rbp - 2048]
+    lea rsi, [rbp - 6144]
     mov rcx, r12
     rep movsb
     

