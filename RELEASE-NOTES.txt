@@ -4,6 +4,13 @@
 
                             *****RELEASE NOTES*****
 
+Version 1.8
+*New Features
+    - Added beaconing over TLS/HTTPS
+    - Added mouse.py for C2 operations
+    - Added 2-stage payload delivery (asm-https -> asm-executor)
+    - Added some more helper scripts and other fun stuff
+
 Version 1.6
 *New Features
     - Added additional target process support
