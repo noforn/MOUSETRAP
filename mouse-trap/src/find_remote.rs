@@ -12,7 +12,7 @@ use windows::{
             Threading::{OpenProcess, PROCESS_QUERY_INFORMATION},
             ProcessStatus::{GetProcessImageFileNameA, EnumProcesses},
         },
-        Foundation::CloseHandle,
+        Foundation::{CloseHandle, HANDLE},
     },
 };
 
@@ -62,6 +62,84 @@ pub unsafe fn find_target_pid(process_name: &str) -> Option<u32> {
         }
 
         let _ = CloseHandle(h_process);
+    }
+
+    None
+}
+
+// find any user-owned (non-SYSTEM) process PID
+// checks token ownership to filter out SYSTEM, LOCAL SERVICE, and NETWORK SERVICE
+pub unsafe fn find_user_process_pid() -> Option<u32> {
+    use windows::Win32::Security::{
+        GetTokenInformation, TokenUser,
+        TOKEN_QUERY, TOKEN_USER, IsWellKnownSid,
+        WinLocalSystemSid, WinLocalServiceSid, WinNetworkServiceSid,
+    };
+    use windows::Win32::System::Threading::{GetCurrentProcessId, OpenProcessToken};
+
+    let mut pids = [0u32; 1024];
+    let mut bytes_returned = 0u32;
+    let my_pid = GetCurrentProcessId();
+
+    if EnumProcesses(
+        pids.as_mut_ptr(),
+        (pids.len() * std::mem::size_of::<u32>()) as u32,
+        &mut bytes_returned,
+    )
+    .is_err()
+    {
+        return None;
+    }
+
+    let count = bytes_returned as usize / std::mem::size_of::<u32>();
+
+    for &pid in &pids[..count] {
+        if pid == 0 || pid == 4 || pid == my_pid {
+            continue;
+        }
+
+        let h_process = match OpenProcess(PROCESS_QUERY_INFORMATION, false, pid) {
+            Ok(handle) => handle,
+            Err(_) => continue,
+        };
+
+        // open process token to check ownership
+        let mut h_token = HANDLE::default();
+        if OpenProcessToken(h_process, TOKEN_QUERY, &mut h_token).is_err() {
+            let _ = CloseHandle(h_process);
+            continue;
+        }
+
+        // query token user (SID)
+        let mut info_buf = [0u8; 256];
+        let mut return_length = 0u32;
+        let result = GetTokenInformation(
+            h_token,
+            TokenUser,
+            Some(info_buf.as_mut_ptr() as *mut std::ffi::c_void),
+            info_buf.len() as u32,
+            &mut return_length,
+        );
+        let _ = CloseHandle(h_token);
+
+        if result.is_err() {
+            let _ = CloseHandle(h_process);
+            continue;
+        }
+
+        let token_user = &*(info_buf.as_ptr() as *const TOKEN_USER);
+        let sid = token_user.User.Sid;
+
+        // skip system accounts
+        let is_system = IsWellKnownSid(sid, WinLocalSystemSid).as_bool()
+            || IsWellKnownSid(sid, WinLocalServiceSid).as_bool()
+            || IsWellKnownSid(sid, WinNetworkServiceSid).as_bool();
+
+        let _ = CloseHandle(h_process);
+
+        if !is_system {
+            return Some(pid);
+        }
     }
 
     None
