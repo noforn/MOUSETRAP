@@ -67,20 +67,18 @@ pub unsafe fn find_target_pid(process_name: &str) -> Option<u32> {
     None
 }
 
-// find any user-owned (non-SYSTEM) process PID
-// checks token ownership to filter out SYSTEM, LOCAL SERVICE, and NETWORK SERVICE
-pub unsafe fn find_user_process_pid() -> Option<u32> {
+// find any user-owned process PID
+// checks tokens to filter out SYSTEM + SERVICE
+pub unsafe fn give_me_anything() -> Option<u32> {
     use windows::Win32::Security::{
         GetTokenInformation, TokenUser,
         TOKEN_QUERY, TOKEN_USER, IsWellKnownSid,
         WinLocalSystemSid, WinLocalServiceSid, WinNetworkServiceSid,
     };
-    use windows::Win32::System::Threading::{GetCurrentProcessId, OpenProcessToken};
-
+    use windows::Win32::System::Threading::{GetCurrentProcessId, IsWow64Process, OpenProcessToken};
     let mut pids = [0u32; 1024];
     let mut bytes_returned = 0u32;
     let my_pid = GetCurrentProcessId();
-
     if EnumProcesses(
         pids.as_mut_ptr(),
         (pids.len() * std::mem::size_of::<u32>()) as u32,
@@ -92,18 +90,23 @@ pub unsafe fn find_user_process_pid() -> Option<u32> {
     }
 
     let count = bytes_returned as usize / std::mem::size_of::<u32>();
-
+    // skip 0 , 4 (SYSTEM) , and our PID
     for &pid in &pids[..count] {
         if pid == 0 || pid == 4 || pid == my_pid {
             continue;
         }
-
         let h_process = match OpenProcess(PROCESS_QUERY_INFORMATION, false, pid) {
             Ok(handle) => handle,
             Err(_) => continue,
         };
+        // skip if not 64-bit
+        let mut is_wow64 = windows::core::BOOL(0);
+        if IsWow64Process(h_process, &mut is_wow64).is_ok() && is_wow64.as_bool() {
+            let _ = CloseHandle(h_process);
+            continue;
+        }
 
-        // open process token to check ownership
+        // OpenProcessToken and check ownership
         let mut h_token = HANDLE::default();
         if OpenProcessToken(h_process, TOKEN_QUERY, &mut h_token).is_err() {
             let _ = CloseHandle(h_process);
@@ -129,19 +132,16 @@ pub unsafe fn find_user_process_pid() -> Option<u32> {
 
         let token_user = &*(info_buf.as_ptr() as *const TOKEN_USER);
         let sid = token_user.User.Sid;
-
         // skip system accounts
         let is_system = IsWellKnownSid(sid, WinLocalSystemSid).as_bool()
             || IsWellKnownSid(sid, WinLocalServiceSid).as_bool()
             || IsWellKnownSid(sid, WinNetworkServiceSid).as_bool();
-
         let _ = CloseHandle(h_process);
 
         if !is_system {
             return Some(pid);
         }
     }
-
     None
 }
 

