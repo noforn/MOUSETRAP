@@ -1,4 +1,4 @@
-# MOUSETRAP Capabilities and Feature Summary
+# MOUSETRAP
 
 ## Executive Summary
 MOUSETRAP is a multi-component red-team framework composed of:
