@@ -45,4 +45,5 @@ else:
     # 64-bit: Single 8-byte value
     total_bytes = af_bytes + port_bytes + ip_bytes
     hex_value = '{:016x}'.format(int.from_bytes(total_bytes, 'little'))
+    print(f"\nPaste into desired payload:")
     print(f"mov r9, 0x{hex_value}")
