@@ -61,7 +61,6 @@ pub fn string_length_w(string: *const u16) -> usize {
     }
 }
 
-// Utility function for checking null terminator for u8 and u16
 trait IsNull {
     fn is_null(&self) -> bool;
 }
@@ -72,18 +71,6 @@ impl IsNull for u16 {
     }
 }
 
-/// Formats a named pipe string and stores it in a `Vec<u16>`
-///
-/// This function generates a named pipe path in the format:
-/// `\\Device\\NamedPipe\\Win32Pipes.<process_id>.<pipe_id>`
-/// and stores the UTF-16 encoded string in a `Vec<u16>`.
-///
-/// # Parameters
-/// - `process_id`: The process ID to be included in the pipe name.
-/// - `pipe_id`: The pipe ID to be included in the pipe name.
-///
-/// # Returns
-/// A `Vec<u16>` containing the UTF-16 encoded string, null-terminated.
 pub fn format_named_pipe_string(process_id: usize, pipe_id: u32) -> Vec<u16> {
     let mut pipe_name_utf16 = Vec::with_capacity(50); // Pre-allocate space
 
@@ -115,10 +102,6 @@ pub fn format_named_pipe_string(process_id: usize, pipe_id: u32) -> Vec<u16> {
     pipe_name_utf16
 }
 
-/// Helper function to convert a hex digit (0-15) into its corresponding ASCII character.
-///
-/// # Returns
-/// The corresponding ASCII character as a `u16`.
 fn to_hex_char(digit: u16) -> u16 {
     match digit {
         0..=9 => '0' as u16 + digit,
@@ -127,11 +110,6 @@ fn to_hex_char(digit: u16) -> u16 {
     }
 }
 
-/// Creates a named pipe and returns handles for reading and writing.
-///
-/// This function sets up a named pipe with specified security attributes, buffer size,
-/// and other options. It creates the pipe with both read and write handles, making it
-/// ready for inter-process communication using the `NtCreateNamedPipeFile` NT API function.
 pub unsafe fn nt_create_named_pipe_file(
     h_read_pipe: &mut *mut c_void,
     h_write_pipe: &mut *mut c_void,

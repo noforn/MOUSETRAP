@@ -224,9 +224,6 @@ impl RustPotatoContext {
                 }
             }
 
-            _print!("[+] Context successfully initialized");
-            _print!("----------------------------------\n[+] INITIALIZE CONTEXT - END\n");
-
             Some(())
         }
     }
@@ -278,8 +275,6 @@ impl RustPotatoContext {
     }
 
     pub fn hook_rpc(&mut self) -> Option<()> {
-        _print!("\n[+] RPC HOOK - START\n----------------------------------");
-
         unsafe {
             let mut region_size = std::mem::size_of::<*mut c_void>() * self.dispatch_table.len();
             let nt = ntdll();
@@ -329,7 +324,6 @@ impl RustPotatoContext {
 
             self.is_hook = true; // Mark the hook as active
             _print!("[+] RPC hook successfully installed");
-            _print!("----------------------------------\n[+] RPC HOOK - END\n");
 
             Some(())
         }
@@ -363,8 +357,6 @@ impl RustPotatoContext {
     }
 
     pub fn start_pipe_server(&mut self) -> Option<()> {
-        _print!("\n[+] PIPE SERVER - START\n----------------------------------");
-
         if self.is_hook && !self.is_start {
             let server_pipe = self.server_pipe.clone();
             let system_identity: Arc<Mutex<WindowsIdentity>> =
@@ -477,7 +469,6 @@ impl RustPotatoContext {
                                 );
                             }
 
-                            _print!("----------------------------------\n[+] PIPE SERVER - END\n");
                         } else {
                             _print!(
                                 "[-] Failed to impersonate pipe client. Error: {}",
